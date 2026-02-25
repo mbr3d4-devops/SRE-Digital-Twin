@@ -1,0 +1,16 @@
+# Temp files
+*.log
+*.tmp
+*.txt
+.DS_Store
+
+# Infrastructure Data
+data/
+
+# SSH keys
+*.pub
+github_key
+
+# Secrets
+*.secret
+.env
