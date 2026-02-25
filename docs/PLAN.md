@@ -1,11 +1,10 @@
 <plan>
-  <task id="01-infra-audit">
-    <objective>Validar a integridade física e lógica da fundação v1.0.</objective>
+  <task id="04-fix-selinux-storage">
+    <objective>Garantir que o Pod tenha permissão de escrita no NVMe.</objective>
     <steps>
-      <step>Executar snapshot do cluster (kubectl dump).</step>
-      <step>Verificar permissões de escrita no volume NVMe.</step>
-      <step>Analisar logs do Antigravity vs Estado Real.</step>
+      <step>Executar: sudo chcon -Rt svirt_sandbox_file_t /home/marcelo/lab-infra-repo/data</step>
+      <step>Validar com: ls -laZ</step>
     </steps>
-    <verification>Status 'Bound' nos PVCs e conectividade com LM Studio confirmada.</verification>
+    <verification>Criação de um arquivo teste de dentro de um Pod temporário.</verification>
   </task>
 </plan>

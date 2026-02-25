@@ -1,9 +1,8 @@
-# STATE.md (Audit Results)
+# STATE.md (Update)
 **Data:** 2026-02-25
-**Status:** Repositório Remoto Sincronizado.
-**Maturidade Documental:** 100% (Blueprint inicial completo).
-**Maturidade de Infra:** 10% (Estrutura de diretórios criada, manifestos pendentes).
-
-## ⚠️ Bloqueadores & Riscos
-- **Visibilidade:** Ausência de exporters de hardware no host (RTX 4070).
-- **Segurança:** Validar permissões de escrita (SELinux) no diretório `/data`.
+**Status:** v1.0 [CONCLUÍDA] | v1.2 [INICIADA]
+**Marcos:**
+- RBAC de Agentes validado: Watcher (Auditor) e Archivist (Isolado).
+- Namespaces sincronizados entre Cluster e Git.
+- Persistência NVMe pronta para receber dados.
+**Bloqueadores:** Nenhum. Próximo passo: Deployment do primeiro Agente.

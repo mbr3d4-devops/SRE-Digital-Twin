@@ -1,6 +1,7 @@
 # Temp files
 *.log
 *.tmp
+*.txt
 .DS_Store
 
 # Infrastructure Data (Persisted locally on NVMe, do not dump to git)
