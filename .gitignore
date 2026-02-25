@@ -1,0 +1,15 @@
+# Temp files
+*.log
+*.tmp
+.DS_Store
+
+# Infrastructure Data (Persisted locally on NVMe, do not dump to git)
+data/
+
+# SSH keys
+*.pub
+github_key
+
+# Secrets
+*.secret
+.env
