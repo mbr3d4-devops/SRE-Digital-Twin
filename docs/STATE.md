@@ -1,5 +1,6 @@
-# STATE.md (Audit v1.2)
-**Status:** Watcher operando em modo "Listen".
-**Infraestrutura:** Conectividade Pod-to-K8s API validada.
-**IA:** Conectividade Pod-to-Host (LM Studio) pendente de teste de inferência real.
-**Próximo Marco:** Trigger de evento de erro para validar a análise do Llama 3.1.
+# STATE.md (Recalibration)
+**Fase Atual:** v1.3 (Deep Observability)
+**Status do Cluster:** 100% Operacional (Agent-team 5/5).
+**Último Evento:** Incidente de teste 'alerting-test-app' remediado via GitOps.
+**Próximo Objetivo Técnico:** Eliminar pontos cegos de telemetria nos namespaces de produção.
+**Meta de Engenharia:** Estabilizar o fluxo Gitea -> ArgoCD -> Cluster.
