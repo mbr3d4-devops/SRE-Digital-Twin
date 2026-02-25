@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: warden-sa
+  namespace: ai-ops
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: warden-agent
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: warden
+  template:
+    metadata:
+      labels:
+        app: warden
+    spec:
+      serviceAccountName: warden-sa
+      containers:
+      - name: warden-logic
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "pip install requests openai pydantic pyyaml && python -u /app/warden_logic.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: GITEA_URL
+          value: "http://gitea-http.gitops.svc.cluster.local:3000"
+        - name: STATE_FILE_PATH
+          value: "/repo/docs/STATE.md"
+        - name: REQ_FILE_PATH
+          value: "/repo/docs/REQUIREMENTS.md"
+        - name: LM_STUDIO_URL
+          value: "http://172.18.0.1:1234/v1"
+        - name: MODEL_NAME
+          value: "meta-llama-3.1-8b-instruct"
+        volumeMounts:
+        - name: repo-volume
+          mountPath: /repo
+        - name: logic-code
+          mountPath: /app
+      volumes:
+      - name: repo-volume
+        hostPath:
+          path: /home/marcelo/lab-infra-repo
+          type: Directory
+      - name: logic-code
+        configMap:
+          name: warden-logic-script

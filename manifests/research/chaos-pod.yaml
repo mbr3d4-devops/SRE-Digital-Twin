@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chaos-trigger-pod
+  namespace: ai-ops
+  labels:
+    component: chaos-test
+spec:
+  containers:
+  - name: broken-container
+    image: busybox:invalid-tag-9999
+    command: ["sleep", "3600"]

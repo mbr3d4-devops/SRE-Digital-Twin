@@ -1,16 +1,9 @@
-# 📋 Project Requirements
+# Requisitos Arquiteturais do Laboratório AI-Ops
 
-## R1. Infraestrutura (v1.0)
-- Persistência real em NVMe com retenção pós-restart do Kind.
-- Conectividade bidirecional Pod <-> Host (172.18.0.1).
+## 1. Limites de Recursos (Resource Quotas)
+- NENHUM container no namespace `app-production` pode ter `limits.memory` inferior a `64Mi`.
+- NENHUM Banco de Dados pode rodar sem PersistentVolume.
 
-## R2. Observabilidade (v1.3)
-- Correlação de Logs, Métricas e Traces (TraceID unificado).
-- Monitoramento de VRAM da GPU para evitar OOM no LM Studio.
-
-## R3. Governança de IA (v1.8)
-- Protocolo "Porta Aberta": Validação física de toda ação lógica.
-- Kill Switch: Feature flags para desativar habilidades dos agentes.
-
-## Definition of Done (DoD)
-- Manifesto YAML no Git + Sync via ArgoCD + Auditoria do Watcher.
+## 2. Padrões de Imagem
+- É PROIBIDO o uso da tag `:latest` em namespaces de produção.
+- Imagens do Docker Hub devem ser homologadas ou verificadas.

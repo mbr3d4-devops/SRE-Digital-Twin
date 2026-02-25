@@ -1,6 +1,7 @@
-# STATE.md (Recalibration)
-**Fase Atual:** v1.3 (Deep Observability)
-**Status do Cluster:** 100% Operacional (Agent-team 5/5).
-**Último Evento:** Incidente de teste 'alerting-test-app' remediado via GitOps.
-**Próximo Objetivo Técnico:** Eliminar pontos cegos de telemetria nos namespaces de produção.
-**Meta de Engenharia:** Estabilizar o fluxo Gitea -> ArgoCD -> Cluster.
+# Estado Atual do Cluster
+
+**STATUS GERAL:** WARNING (Atenção Elevada)
+
+## Bloqueadores Ativos
+- [CRITICAL] Não autorizar mudanças que escalem Pods horizontalmente (HPA bloqueado) devido a contenção de disco no Host.
+- [WARNING] Múltiplos eventos de OOMKilled relatados nas últimas 48h. Prioridade em revisões de manifestos que lidam com alocação de memória.

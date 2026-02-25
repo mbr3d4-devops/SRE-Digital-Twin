@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: oom-stress-test
   namespace: app-production
+  labels:
+    monitor: "true"
 spec:
   replicas: 1
   selector:
@@ -12,6 +14,7 @@ spec:
     metadata:
       labels:
         app: oom-stress
+        monitor: "true"
     spec:
       containers:
       - name: mem-eater
