@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: infra-foundation-stack
+  namespace: gitops
+spec:
+  project: default
+  source:
+    repoURL: 'http://gitea-http.gitops.svc.cluster.local:3000/marcelo/cluster-ops.git'
+    targetRevision: HEAD
+    path: .
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: gitops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ai-driven-apps
+  namespace: gitops
+spec:
+  project: default
+  source:
+    repoURL: 'http://gitea-http.gitops.svc.cluster.local:3000/marcelo/target-app-infra.git'
+    targetRevision: HEAD
+    path: .
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: app-production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

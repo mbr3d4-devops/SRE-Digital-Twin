@@ -1,0 +1,23 @@
+# Service sem Selector: Permite definir Endpoints manuais
+apiVersion: v1
+kind: Service
+metadata:
+  name: lmstudio-service
+  namespace: ai-ops
+spec:
+  ports:
+    - protocol: TCP
+      port: 1234
+      targetPort: 1234
+---
+# Endpoint apontando para o Gateway do Kind (Host Fedora)
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: lmstudio-service
+  namespace: ai-ops
+subsets:
+  - addresses:
+      - ip: "172.18.0.1" # IP padrão da interface de ponte do Docker (Host)
+    ports:
+      - port: 1234

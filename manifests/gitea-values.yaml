@@ -1,0 +1,20 @@
+gitea:
+  admin:
+    username: marcelo
+    password: "password123"
+  config:
+    server:
+      DOMAIN: gitea-http.gitops.svc.cluster.local
+      ROOT_URL: http://gitea-http.gitops.svc.cluster.local:3000/
+      SSH_DOMAIN: gitea-ssh.gitops.svc.cluster.local
+      SSH_PORT: 2222
+  metrics:
+    enabled: true
+service:
+  http:
+    port: 3000
+    type: ClusterIP
+postgresql:
+  enabled: true
+postgresql-ha:
+  enabled: false

@@ -1,0 +1,92 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-team
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-team
+  template:
+    metadata:
+      labels:
+        app: agent-team
+    spec:
+      initContainers:
+      - name: preflight-check
+        image: python:3.9-slim
+        command: ['python', '/scripts/preflight.py']
+        env:
+        - name: GITEA_URL
+          value: "http://gitea-http.gitops.svc.cluster.local:3000"
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+      containers:
+      # 1. Orchestrator
+      - name: orchestrator
+        image: python:3.9-slim
+        command: ["/bin/sh", "-c", "pip install psycopg2-binary && python3 /scripts/orchestrator_v7.py"]
+        env:
+        - name: LM_STUDIO_ENDPOINT
+          value: "http://172.18.0.1:1234/v1"
+        volumeMounts:
+        - name: scripts
+          mountPath: /scripts
+        - name: hooks-volume
+          mountPath: /etc/config
+        - name: skills-volume
+          mountPath: /etc/agent/skills
+      # 2. DevOps (Git)
+      - name: devops
+        image: bitnami/git:latest
+        command: ["/bin/sh", "-c", "echo 'DevOps Ligar'; while true; do sleep 3600; done"]
+        volumeMounts:
+        - name: infra-repo
+          mountPath: /app/infra-repo
+        env:
+        - name: GITEA_REMOTE
+          value: "http://gitea-http.gitops.svc.cluster.local:3000/marcelo/target-app-infra.git"
+      # 3. Auditor (Kubectl / Gatekeeper)
+      - name: auditor
+        image: bitnami/kubectl:latest
+        command: ["/bin/sh", "-c", "echo 'Auditor Ligar'; while true; do sleep 3600; done"]
+        env:
+        - name: AGENT_ROLE
+          value: "auditor"
+        - name: STACKGUARD_MODE
+          value: "strict"
+      # 4. Analyst (Metrics / Logs)
+      - name: analyst
+        image: bitnami/kubectl:latest
+        command: ["/bin/sh", "-c", "echo 'Analyst Ligar'; while true; do sleep 3600; done"]
+        env:
+        - name: AGENT_ROLE
+          value: "analyst"
+        - name: GRAFANA_URL
+          value: "http://kube-prometheus-stack-grafana.monitoring.svc.cluster.local"
+      # 5. Archivist (DB / Records)
+      - name: archivist
+        image: bitnami/kubectl:latest
+        command: ["/bin/sh", "-c", "echo 'Archivist Ligar'; while true; do sleep 3600; done"]
+        env:
+        - name: AGENT_ROLE
+          value: "archivist"
+        - name: DB_HOST
+          value: "postgres-db"
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+      - name: hooks-volume
+        configMap:
+          name: rocketchat-hooks
+      - name: skills-volume
+        configMap:
+          name: agent-skills
+      - name: infra-repo
+        hostPath:
+          path: /home/marcelo/lab-infra-repo
+          type: Directory

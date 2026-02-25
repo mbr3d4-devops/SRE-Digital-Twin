@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-api-auth
+  namespace: app-production
+  labels:
+    service: auth-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: auth-backend
+  template:
+    metadata:
+      labels:
+        app: auth-backend
+    spec:
+      containers:
+      - name: server
+        image: alpine
+        command: ["sh", "-c", "echo 'Iniciando servico...'; sleep 5; if [ -z \"$DB_PASSWORD\" ]; then echo 'FATAL: DB_PASSWORD nao encontrada. Abortando...'; exit 1; fi"]
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: non-existent-vault-secret
+              key: password
