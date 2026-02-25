@@ -7,4 +7,13 @@
     </steps>
     <verification>Criação de um arquivo teste de dentro de um Pod temporário.</verification>
   </task>
+  <task id="09-watcher-deployment">
+    <objective>Subir o primeiro agente funcional (The Watcher).</objective>
+    <steps>
+      <step>Criar a branch 'feature/v1.2-watcher-deploy'.</step>
+      <step>Implementar manifests/base/configmaps.yaml (Prompts e URLs).</step>
+      <step>Implementar manifests/base/watcher-deployment.yaml.</step>
+    </steps>
+    <verification>Log do pod mostrando: 'Conectado ao LM Studio e Cluster Auditoria Ativa'.</verification>
+  </task>
 </plan>
