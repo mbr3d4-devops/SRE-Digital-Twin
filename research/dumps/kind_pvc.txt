@@ -1,0 +1,10 @@
+NAMESPACE       NAME                                 STATUS    VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+ai-ops          nvme-storage-pvc                     Bound     nvme-storage-pv                            50Gi       RWO            manual         <unset>                 6m49s
+ai-ops          postgres-data-postgres-db-0          Bound     pvc-9c657f01-e08b-4d24-a689-ea1c45d802b5   5Gi        RWO            standard       <unset>                 4d5h
+ai-ops          postgres-pvc                         Pending                                                                        standard       <unset>                 4d5h
+communication   datadir-rocketchat-mongodb-0         Bound     pvc-22f32212-bc99-4ea6-997d-a603fa48d98f   8Gi        RWO            standard       <unset>                 3d6h
+gitops          data-gitea-postgresql-0              Bound     pvc-96cb160a-4efd-40fd-b3a9-27416a82ceb3   10Gi       RWO            standard       <unset>                 4d4h
+gitops          gitea-shared-storage                 Bound     pvc-be913df3-6789-450b-aa20-add9af46fa68   10Gi       RWO            standard       <unset>                 4d4h
+gitops          valkey-data-gitea-valkey-cluster-0   Bound     pvc-5ec655d6-21de-479c-aaec-72218720bca5   8Gi        RWO            standard       <unset>                 4d4h
+gitops          valkey-data-gitea-valkey-cluster-1   Bound     pvc-123ab02b-9594-432d-8d94-76e0cc621fab   8Gi        RWO            standard       <unset>                 4d4h
+gitops          valkey-data-gitea-valkey-cluster-2   Bound     pvc-4f70bfe0-24c8-4fa0-a84a-c32e80068090   8Gi        RWO            standard       <unset>                 4d4h
