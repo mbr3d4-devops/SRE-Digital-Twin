@@ -4,13 +4,7 @@ metadata:
   name: watcher-config
   namespace: ai-ops
 data:
-  LM_STUDIO_URL: "http://172.18.0.1:1234/v1/chat/completions"
-  LM_STUDIO_MODEL: "local-model"
-  AUDIT_INTERVAL: "60"
-  REPORT_PATH: "/data/reports"
-  SYSTEM_PROMPT: |
-    Você é o Watcher, um agente de auditoria SRE autônomo.
-    Sua função é monitorar o cluster Kubernetes, identificar anomalias,
-    e gerar relatórios de auditoria estruturados em JSON.
-    Sempre valide fisicamente cada ação lógica (Protocolo Porta Aberta).
-    Reporte: namespace, recurso, status, severidade, recomendação.
+  LM_STUDIO_URL: "http://172.18.0.1:1234/v1"
+  MODEL_NAME: "llama-3.1-8b-lexi"
+  LOG_LEVEL: "INFO"
+  AUDIT_INTERVAL: "60s"

@@ -3,10 +3,6 @@ kind: Deployment
 metadata:
   name: watcher-agent
   namespace: ai-ops
-  labels:
-    app: watcher
-    role: auditor
-    version: v1.2
 spec:
   replicas: 1
   selector:
@@ -16,123 +12,27 @@ spec:
     metadata:
       labels:
         app: watcher
-        role: auditor
     spec:
       serviceAccountName: watcher-sa
       containers:
-      - name: watcher
+      - name: watcher-python
         image: python:3.11-slim
-        command: ["python", "-u", "/app/watcher.py"]
+        command: ["/bin/sh", "-c", "pip install kubernetes openai && python -u /app/watcher_logic.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
         envFrom:
         - configMapRef:
             name: watcher-config
-        resources:
-          requests:
-            cpu: "100m"
-            memory: "128Mi"
-          limits:
-            cpu: "500m"
-            memory: "512Mi"
         volumeMounts:
-        - name: audit-reports
-          mountPath: /data/reports
-        - name: watcher-script
+        - name: storage-nvme
+          mountPath: /data
+        - name: logic-code
           mountPath: /app
       volumes:
-      - name: audit-reports
+      - name: storage-nvme
         persistentVolumeClaim:
           claimName: nvme-storage-pvc
-      - name: watcher-script
+      - name: logic-code
         configMap:
-          name: watcher-script
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: watcher-script
-  namespace: ai-ops
-data:
-  watcher.py: |
-    """
-    The Watcher - SRE Digital Twin v1.2
-    Agente de auditoria autônomo que monitora o cluster
-    e se comunica com o LM Studio para análise de incidentes.
-    """
-    import os
-    import json
-    import time
-    import urllib.request
-    from datetime import datetime
-
-    LM_STUDIO_URL = os.environ.get("LM_STUDIO_URL", "http://172.18.0.1:1234/v1/chat/completions")
-    LM_STUDIO_MODEL = os.environ.get("LM_STUDIO_MODEL", "local-model")
-    AUDIT_INTERVAL = int(os.environ.get("AUDIT_INTERVAL", "60"))
-    REPORT_PATH = os.environ.get("REPORT_PATH", "/data/reports")
-    SYSTEM_PROMPT = os.environ.get("SYSTEM_PROMPT", "Você é o Watcher, um agente de auditoria SRE.")
-
-    def check_lm_studio():
-        """Testa conectividade com o LM Studio."""
-        try:
-            payload = json.dumps({
-                "model": LM_STUDIO_MODEL,
-                "messages": [{"role": "user", "content": "ping"}],
-                "max_tokens": 10
-            }).encode("utf-8")
-            req = urllib.request.Request(LM_STUDIO_URL, data=payload, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                return resp.status == 200
-        except Exception as e:
-            print(f"[WATCHER] LM Studio connection failed: {e}")
-            return False
-
-    def audit_cluster():
-        """Simula auditoria básica do cluster via service account."""
-        timestamp = datetime.now().isoformat()
-        report = {
-            "timestamp": timestamp,
-            "agent": "watcher-v1.2",
-            "status": "active",
-            "checks": [
-                {"check": "namespace_count", "status": "ok"},
-                {"check": "pod_health", "status": "ok"},
-                {"check": "pvc_binding", "status": "ok"}
-            ]
-        }
-        return report
-
-    def save_report(report):
-        """Persiste o relatório no NVMe via volume mount."""
-        os.makedirs(REPORT_PATH, exist_ok=True)
-        filename = f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-        filepath = os.path.join(REPORT_PATH, filename)
-        with open(filepath, "w") as f:
-            json.dump(report, f, indent=2)
-        print(f"[WATCHER] Report saved: {filepath}")
-
-    def main():
-        print("=" * 60)
-        print("[WATCHER] The Watcher v1.2 - SRE Digital Twin")
-        print("=" * 60)
-
-        # Connectivity check
-        lm_ok = check_lm_studio()
-        if lm_ok:
-            print("[WATCHER] ✅ Conectado ao LM Studio e Cluster Auditoria Ativa")
-        else:
-            print("[WATCHER] ⚠️ LM Studio offline. Modo auditoria local ativado.")
-
-        print(f"[WATCHER] Intervalo de auditoria: {AUDIT_INTERVAL}s")
-        print(f"[WATCHER] Relatórios em: {REPORT_PATH}")
-
-        while True:
-            try:
-                report = audit_cluster()
-                report["lm_studio_connected"] = check_lm_studio()
-                save_report(report)
-                print(f"[WATCHER] Audit cycle complete at {report['timestamp']}")
-            except Exception as e:
-                print(f"[WATCHER] ERROR in audit cycle: {e}")
-            time.sleep(AUDIT_INTERVAL)
-
-    if __name__ == "__main__":
-        main()
+          name: watcher-logic-script

@@ -1,8 +1,5 @@
-# STATE.md (Update)
-**Data:** 2026-02-25
-**Status:** v1.0 [CONCLUÍDA] | v1.2 [INICIADA]
-**Marcos:**
-- RBAC de Agentes validado: Watcher (Auditor) e Archivist (Isolado).
-- Namespaces sincronizados entre Cluster e Git.
-- Persistência NVMe pronta para receber dados.
-**Bloqueadores:** Nenhum. Próximo passo: Deployment do primeiro Agente.
+# STATE.md (Audit v1.2)
+**Status:** Watcher operando em modo "Listen".
+**Infraestrutura:** Conectividade Pod-to-K8s API validada.
+**IA:** Conectividade Pod-to-Host (LM Studio) pendente de teste de inferência real.
+**Próximo Marco:** Trigger de evento de erro para validar a análise do Llama 3.1.
