@@ -410,9 +410,23 @@ data:
             yaml_match = re.search(r"Trecho Sugerido \(YAML\).*?```yaml\n(.*?)\n```", diag, re.DOTALL | re.IGNORECASE)
             if yaml_match:
                 suggested_res = yaml.safe_load(yaml_match.group(1))
-                if getattr(suggested_res, "get", None) and "resources" in suggested_res:
+                def find_res(d):
+                    if isinstance(d, dict):
+                        if "resources" in d: return d["resources"]
+                        if "limits" in d or "requests" in d: return d
+                        for v in d.values():
+                            r = find_res(v)
+                            if r: return r
+                    elif isinstance(d, list):
+                        for i in d:
+                            r = find_res(i)
+                            if r: return r
+                    return None
+                
+                res_dict = find_res(suggested_res)
+                if res_dict is not None:
                     for container in manifest.get("spec", {}).get("template", {}).get("spec", {}).get("containers", []):
-                        container["resources"] = suggested_res["resources"]
+                        container["resources"] = res_dict
                     if fix_desc == "Rollout Restart": fix_desc = "Ajuste de resources limits recomendado pelo Analyst"
                     print(f"DEBUG: Applied LLM resources patch to manifest", flush=True)
         except Exception as e:
