@@ -194,29 +194,29 @@ data:
         current_res = json.dumps(manifest.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [{}])[0].get('resources', {}), indent=2)
         
         sys_p = f"""Você é o SRE Analyst da Digital Twin. RESPOSTA EM PORTUGUÊS (BRASIL).
-Siga este formato Markdown RIGOROSAMENTE:
-1. **Resumo do Incidente**: O que está acontecendo e impacto.
-2. **Evidências Técnicas**: 
-   - **Logs do Loki**:
-   ```text
-   {logs[:800].replace('`', "'")}
-   ```
-   - **Métricas Prometheus**: {metrics}
-3. **Análise de Causa Raiz**: O porquê técnico (ex: OOM, Limits).
-4. **Contexto Histórico**: Postmortems relacionados: {pm_files}.
-5. **Sugestão de Correção**:
-   - **Trecho Atual (YAML)**:
-   ```yaml
-   {current_res}
-   ```
-   - **Trecho Sugerido (YAML)**:
-   ```yaml
-   resources:
-     limits:
-       memory: "128Mi"
-       cpu: "100m"
-   ```
-"""
+        Siga este formato Markdown RIGOROSAMENTE:
+        1. **Resumo do Incidente**: O que está acontecendo e impacto.
+        2. **Evidências Técnicas**: 
+           - **Logs do Loki**:
+           ```text
+           {logs[:800].replace('`', "'")}
+           ```
+           - **Métricas Prometheus**: {metrics}
+        3. **Análise de Causa Raiz**: O porquê técnico (ex: OOM, Limits).
+        4. **Contexto Histórico**: Postmortems relacionados: {pm_files}.
+        5. **Sugestão de Correção**:
+           - **Trecho Atual (YAML)**:
+           ```yaml
+           {current_res}
+           ```
+           - **Trecho Sugerido (YAML)**:
+           ```yaml
+           resources:
+             limits:
+               memory: "128Mi"
+               cpu: "100m"
+           ```
+        """
         diag, _ = query_llm(sys_p, f"Incident: {alertname} in {deploy}. Respond in Portuguese.", 1000)
         print(f"DEBUG: LLM Diag received", flush=True)
         send_to_rocket("analyst", f"🔍 **Diagnóstico Detalhado**\n{diag}", thread_id=tid, channel_override=channel)
