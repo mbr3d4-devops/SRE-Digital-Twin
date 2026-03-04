@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: fedora-host-metrics
+  namespace: monitoring
+subsets:
+  - addresses:
+      - ip: 172.18.0.1 # IP do Gateway do Kind para o seu Fedora
+    ports:
+      - name: node-exporter
+        port: 9100
+      - name: gpu-exporter
+        port: 9400
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fedora-host-metrics
+  namespace: monitoring
+  labels:
+    monitor: "true" # A label que o seu ServiceMonitor global já reconhece!
+spec:
+  ports:
+    - name: node-exporter
+      port: 9100
+      targetPort: 9100
+    - name: gpu-exporter
+      port: 9400
+      targetPort: 9400
