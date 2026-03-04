@@ -406,6 +406,18 @@ data:
         m = re.search(r"FIX_SUGGESTION\s*[:*]+\s*(.*)", diag, re.I)
         if m: fix_desc = m.group(1).split('\n')[0].strip()
         
+        try:
+            yaml_match = re.search(r"Trecho Sugerido \(YAML\).*?```yaml\n(.*?)\n```", diag, re.DOTALL | re.IGNORECASE)
+            if yaml_match:
+                suggested_res = yaml.safe_load(yaml_match.group(1))
+                if getattr(suggested_res, "get", None) and "resources" in suggested_res:
+                    for container in manifest.get("spec", {}).get("template", {}).get("spec", {}).get("containers", []):
+                        container["resources"] = suggested_res["resources"]
+                    if fix_desc == "Rollout Restart": fix_desc = "Ajuste de resources limits recomendado pelo Analyst"
+                    print(f"DEBUG: Applied LLM resources patch to manifest", flush=True)
+        except Exception as e:
+            print(f"WARN: Failed to parse suggested YAML: {e}", flush=True)
+        
         if "cache-engine" in deploy and ("invalid-config-flag" in diag.lower() or "--invalid-config-flag-test" in diag):
             print(f"DEBUG: Detected invalid flag in Redis, applying fix to manifest", flush=True)
             for container in manifest["spec"]["template"]["spec"]["containers"]:
