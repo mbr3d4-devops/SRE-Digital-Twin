@@ -1,0 +1,5 @@
+spec:
+  template:
+    metadata:
+      annotations:
+        restartedAt: '1772648512.7596364'
