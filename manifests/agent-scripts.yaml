@@ -28,8 +28,9 @@ data:
     ==============================================
     - Staff Doctrine: Disk-based GitOps & VSCode Integration
     """
-    import http.server, socketserver, json, urllib.request, urllib.parse, time, hashlib, base64, psycopg2, ssl, datetime, logging, uuid, sys, threading, re, os, yaml
+    import http.server, socketserver, json, urllib.request, urllib.parse, time, hashlib, base64, psycopg2, ssl, datetime, logging, uuid, sys, threading, re, os, yaml, copy
     from concurrent.futures import ThreadPoolExecutor
+    import redis as redis_lib
     
     class AntigravityJSONFormatter(logging.Formatter):
         def format(self, record):
@@ -66,7 +67,41 @@ data:
     except: K8S_TOKEN, CTX = "", ssl._create_unverified_context()
     
     COLORS = {"ops-critical": "#FF0000", "ops-remediation": "#FFA500", "ops-security": "#7000FF", "ops-history": "#4A4A4A", "analyst": "#9C27B0", "devops": "#2196F3"}
-    pending_actions = {}; active_investigations = {}
+    
+    # v2.0: Redis-backed state persistence
+    REDIS_HOST = os.environ.get("REDIS_HOST", "redis-state")
+    try:
+        rdb = redis_lib.Redis(host=REDIS_HOST, port=6379, db=0, decode_responses=True)
+        rdb.ping()
+        print(f"DEBUG: Redis connected at {REDIS_HOST}", flush=True)
+    except Exception as e:
+        print(f"WARN: Redis unavailable ({e}), falling back to in-memory", flush=True)
+        rdb = None
+
+    def state_get(collection, key):
+        if rdb:
+            val = rdb.hget(collection, key)
+            return json.loads(val) if val else None
+        return _mem.get(collection, {}).get(key)
+
+    def state_set(collection, key, value):
+        if rdb:
+            rdb.hset(collection, key, json.dumps(value))
+        else:
+            _mem.setdefault(collection, {})[key] = value
+
+    def state_del(collection, key):
+        if rdb:
+            rdb.hdel(collection, key)
+        else:
+            _mem.get(collection, {}).pop(key, None)
+
+    def state_exists(collection, key):
+        if rdb:
+            return rdb.hexists(collection, key)
+        return key in _mem.get(collection, {})
+
+    _mem = {"pending": {}, "investigations": {}}
     
     def send_to_rocket(agent_role, text, aliases=None, attachments=None, thread_id=None, channel_override=None):
         channels = {"orchestrator": "ops-warroom", "analyst": "ops-warroom", "devops": "ops-warroom", "warden": "ops-security", "archivist": "ops-history"}
@@ -145,7 +180,8 @@ data:
         a = action["alert"]; l = a.get("labels", {}); alertname = l.get("alertname", ""); ns = action["ns"]; deploy = action["deploy"]
         healthy, _ = wait_for_resource_health(deploy, ns)
         if not healthy: 
-            if active_investigations.get(f"{ns}/{deploy}") == trace_id: active_investigations.pop(f"{ns}/{deploy}", None)
+            inv_key = f"{ns}/{deploy}"
+            if state_get("investigations", inv_key) == trace_id: state_del("investigations", inv_key)
             return
         mttr = "N/A"
         try:
@@ -157,7 +193,8 @@ data:
         body = {"content": base64.b64encode(md.encode()).decode(), "message": "PM Archive", "branch": "main"}
         try: urllib.request.urlopen(urllib.request.Request(GITEA_API+fn, data=json.dumps(body).encode(), headers={"Authorization": "Basic "+GITEA_CREDS, "Content-Type": "application/json"}))
         except: pass
-        if active_investigations.get(f"{ns}/{deploy}") == trace_id: active_investigations.pop(f"{ns}/{deploy}", None)
+        inv_key = f"{ns}/{deploy}"
+        if state_get("investigations", inv_key) == trace_id: state_del("investigations", inv_key)
 
     def clean_manifest(man):
         m = copy.deepcopy(man)
@@ -176,10 +213,10 @@ data:
             if pod.count("-") >= 2: deploy = "-".join(pod.split("-")[:-2])
             else: deploy = pod.split("-")[0] if "-" in pod else pod
         inv_key = f"{ns}/{deploy}"; channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
-        if inv_key in active_investigations: 
+        if state_exists("investigations", inv_key): 
             print(f"DEBUG: Alert {inv_key} already in active_investigations", flush=True)
             return
-        active_investigations[inv_key] = trace_id
+        state_set("investigations", inv_key, trace_id)
         print(f"DEBUG: Sending initial alert to RC thread...", flush=True)
         tid = send_to_rocket("orchestrator", f"🚨 **{severity.upper()}:** {alertname}\nNS: `{ns}` | Pod: `{pod}`", channel_override=channel)
         print(f"DEBUG: RC Thread ID: {tid}", flush=True)
@@ -246,7 +283,8 @@ data:
         gitea_link = f"http://gitea.127.0.0.1.nip.io:3000/marcelo/target-app-infra/src/branch/main/manifests/{path}"
         
         clean_man = clean_manifest(manifest)
-        pending_actions[action_id] = {"alert": alert, "manifest_str": yaml.dump(clean_man, default_flow_style=False), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diag, "trace_id": trace_id, "thread_id": tid, "file_path": path, "channel": channel, "status": "pending"}
+        action_data = {"alert": alert, "manifest_str": yaml.dump(clean_man, default_flow_style=False), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diag, "trace_id": trace_id, "thread_id": tid, "file_path": path, "channel": channel, "status": "pending"}
+        state_set("pending", action_id, action_data)
         print(f"DEBUG: Sending DevOps patch Proposal {action_id}...", flush=True)
         
         fix_text = f"🛠️ **GitOps Patch: {action_id}**\nSolução: {fix_desc}\n[🔍 Abrir no VSCode]({vscode_link})"
@@ -254,10 +292,11 @@ data:
         print(f"DEBUG: workflow_critical completed for {action_id}", flush=True)
 
     def handle_approve(action_id):
-        if action_id not in pending_actions: return "Invalid"
-        a = pending_actions[action_id]
+        a = state_get("pending", action_id)
+        if not a: return "Invalid"
         if a["status"] != "pending": return "Processed"
         a["status"] = "approved"
+        state_set("pending", action_id, a)
         # Staff Doctrine: Physical File Edit in /repo
         import os, subprocess
         full_path = f"/repo/manifests/{a['file_path']}" 
@@ -292,10 +331,13 @@ data:
             return "Error"
 
     def handle_reject(action_id):
-        if action_id in pending_actions:
-            a = pending_actions[action_id]; a["status"] = "rejected"
+        a = state_get("pending", action_id)
+        if a:
+            a["status"] = "rejected"
+            state_set("pending", action_id, a)
             send_to_rocket("devops", "🔴 **Rejeitado**", thread_id=a["thread_id"], channel_override=a["channel"])
-            if active_investigations.get(f"{a['ns']}/{a['deploy']}") == a["trace_id"]: active_investigations.pop(f"{a['ns']}/{a['deploy']}", None)
+            inv_key = f"{a['ns']}/{a['deploy']}"
+            if state_get("investigations", inv_key) == a["trace_id"]: state_del("investigations", inv_key)
         return "Rejected"
 
     class Handler(http.server.BaseHTTPRequestHandler):
