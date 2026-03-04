@@ -159,6 +159,14 @@ data:
         except: pass
         if active_investigations.get(f"{ns}/{deploy}") == trace_id: active_investigations.pop(f"{ns}/{deploy}", None)
 
+    def clean_manifest(man):
+        m = copy.deepcopy(man)
+        m.pop("status", None)
+        meta = m.get("metadata", {})
+        for k in ["creationTimestamp", "resourceVersion", "uid", "generation", "managedFields"]:
+            meta.pop(k, None)
+        return m
+
     def workflow_critical(alert):
         print(f"DEBUG: Starting workflow_critical for {alert.get('labels',{}).get('alertname')}", flush=True)
         trace_id = str(uuid.uuid4()); l = alert.get("labels", {}); severity = l.get("severity", "critical")
@@ -237,7 +245,8 @@ data:
         vscode_link = f"vscode://file/home/marcelo/lab-infra-repo/manifests/{path}"
         gitea_link = f"http://gitea.127.0.0.1.nip.io:3000/marcelo/target-app-infra/src/branch/main/manifests/{path}"
         
-        pending_actions[action_id] = {"alert": alert, "manifest_str": yaml.dump(manifest, default_flow_style=False), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diag, "trace_id": trace_id, "thread_id": tid, "file_path": path, "channel": channel, "status": "pending"}
+        clean_man = clean_manifest(manifest)
+        pending_actions[action_id] = {"alert": alert, "manifest_str": yaml.dump(clean_man, default_flow_style=False), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diag, "trace_id": trace_id, "thread_id": tid, "file_path": path, "channel": channel, "status": "pending"}
         print(f"DEBUG: Sending DevOps patch Proposal {action_id}...", flush=True)
         
         fix_text = f"🛠️ **GitOps Patch: {action_id}**\nSolução: {fix_desc}\n[🔍 Abrir no VSCode]({vscode_link})"
