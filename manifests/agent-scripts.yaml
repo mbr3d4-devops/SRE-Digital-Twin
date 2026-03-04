@@ -189,9 +189,9 @@ Siga rigorosamente este formato Markdown:
 2. **Evidências Técnicas**: 
    - **Logs Recentes (Loki)**:
    ```
-   {{logs}}
+   {logs}
    ```
-   - **Métricas Atuais (Prometheus)**: {{metrics}}
+   - **Métricas Atuais (Prometheus)**: {metrics}
 3. **Análise de Causa Raiz**: O "porquê" técnico do problema.
 4. **Contexto Histórico**: Relacionar com estes postmortems se existirem: {rel_pm if rel_pm else 'Nenhum postmortem anterior encontrado'}.
 5. **Sugestão de Correção**:
@@ -199,7 +199,7 @@ Siga rigorosamente este formato Markdown:
    - **Trecho da Solução**: Bloco de código YAML com a correção sugerida.
 Seja técnico, direto e use emojis para facilitar a leitura no Rocket.Chat."""
         
-        diag, _ = query_llm(sys_p.format(logs=logs, metrics=metrics), f"Alert: {alertname}\nManifest: {json.dumps(manifest)}", 1000)
+        diag, _ = query_llm(sys_p, f"Alert: {alertname}\nManifest: {json.dumps(manifest)}", 1000)
         print(f"DEBUG: LLM Diag received", flush=True)
         send_to_rocket("analyst", f"🔍 **Diagnóstico Detalhado**\n{diag}", thread_id=tid, channel_override=channel)
         
