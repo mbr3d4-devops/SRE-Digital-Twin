@@ -5,8 +5,12 @@ metadata:
   namespace: ai-ops
 spec:
   ports:
-  - port: 6379
+  - name: redis
+    port: 6379
     targetPort: 6379
+  - name: redis-exporter
+    port: 9121
+    targetPort: 9121
   selector:
     app: redis-state
 ---
@@ -39,3 +43,33 @@ spec:
           requests:
             cpu: "50m"
             memory: "32Mi"
+      - name: redis-exporter
+        image: oliver006/redis_exporter:latest
+        ports:
+        - containerPort: 9121
+        resources:
+          limits:
+            cpu: "100m"
+            memory: "64Mi"
+          requests:
+            cpu: "50m"
+            memory: "32Mi"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-state-monitor
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: redis-state
+  namespaceSelector:
+    matchNames:
+    - ai-ops
+  endpoints:
+  - port: redis-exporter
+    interval: 15s
+

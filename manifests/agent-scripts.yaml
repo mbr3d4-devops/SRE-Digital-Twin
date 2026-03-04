@@ -35,6 +35,10 @@ data:
         import pika
     except ImportError:
         pika = None
+    try:
+        from prometheus_client import start_http_server, Counter, Histogram
+    except ImportError:
+        start_http_server = Counter = Histogram = None
     
     class AntigravityJSONFormatter(logging.Formatter):
         def format(self, record):
@@ -175,6 +179,20 @@ data:
                 print(f"WARN: MQ Consumer disconnected ({e}), reconnecting in 10s...", flush=True)
                 time.sleep(10)
 
+    # v2.0.1: Prometheus internal metrics
+    if Counter:
+        METRIC_PR_CREATED = Counter('sre_prs_created_total', 'Total PRs created by DevOps Agent')
+        METRIC_ALERTS_RECEIVED = Counter('sre_alerts_received_total', 'Total alerts received by Orchestrator', ['severity', 'alertname'])
+        METRIC_TASK_LATENCY = Histogram('sre_task_latency_seconds', 'Latency of SRE tasks in seconds', ['phase'])
+    else:
+        METRIC_PR_CREATED = METRIC_ALERTS_RECEIVED = METRIC_TASK_LATENCY = None
+
+    if start_http_server:
+        try:
+            start_http_server(8000)
+            print("DEBUG: Prometheus metrics server on 8000", flush=True)
+        except Exception as e: print(f"WARN: Metrics server fail: {e}", flush=True)
+
     # Start MQ consumer in background
     mq_connect()
     if pika:
@@ -286,6 +304,9 @@ data:
         print(f"DEBUG: Starting workflow_critical for {alert.get('labels',{}).get('alertname')}", flush=True)
         trace_id = str(uuid.uuid4()); l = alert.get("labels", {}); severity = l.get("severity", "critical")
         ns, pod, alertname = l.get("namespace", "N/A"), l.get("pod", "N/A"), l.get("alertname", "Unknown")
+        
+        if METRIC_ALERTS_RECEIVED: METRIC_ALERTS_RECEIVED.labels(severity=severity, alertname=alertname).inc()
+        
         deploy = l.get("deployment")
         if not deploy:
             if pod.count("-") >= 2: deploy = "-".join(pod.split("-")[:-2])
@@ -440,12 +461,15 @@ data:
             print(f"DEBUG: Branch {branch_name} pushed", flush=True)
             
             # 5. Create Pull Request via Gitea API
+            if METRIC_TASK_LATENCY: timer = METRIC_TASK_LATENCY.labels(phase="pr_creation").time()
             pr_body = {"title": f"fix({a['deploy']}): {a['desc']}", "head": branch_name, "base": "main", "body": f"Correção automática pelo SRE DevOps Agent.\n\n**Alert:** {a['alert'].get('labels',{}).get('alertname','N/A')}\n**Diagnóstico:** {a['desc']}\n**Action ID:** {action_id}"}
             pr_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls", data=json.dumps(pr_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"})
             with urllib.request.urlopen(pr_req, timeout=15) as r:
                 pr_data = json.loads(r.read().decode())
                 pr_number = pr_data["number"]
                 pr_url = pr_data["html_url"]
+            if METRIC_TASK_LATENCY: timer.stop()
+            if METRIC_PR_CREATED: METRIC_PR_CREATED.inc()
             print(f"DEBUG: PR #{pr_number} created: {pr_url}", flush=True)
             
             # 6. Notify Rocket.Chat with PR link

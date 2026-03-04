@@ -33,7 +33,7 @@ spec:
       # 1. Orchestrator
       - name: orchestrator
         image: python:3.9-slim
-        command: ["/bin/sh", "-c", "apt-get update && apt-get install -y git && pip install psycopg2-binary PyYAML redis pika && python3 /scripts/orchestrator_v7.py"]
+        command: ["/bin/sh", "-c", "apt-get update && apt-get install -y git && pip install psycopg2-binary PyYAML redis pika prometheus-client && python3 /scripts/orchestrator_v7.py"]
         env:
         - name: PYTHONUNBUFFERED
           value: "1"
@@ -45,6 +45,11 @@ spec:
             port: 8080
           initialDelaySeconds: 15
           periodSeconds: 5
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: metrics
+          containerPort: 8000
         volumeMounts:
         - name: scripts
           mountPath: /scripts
