@@ -301,24 +301,34 @@ data:
         return m
 
     def workflow_critical(alert):
-        print(f"DEBUG: Starting workflow_critical for {alert.get('labels',{}).get('alertname')}", flush=True)
-        trace_id = str(uuid.uuid4()); l = alert.get("labels", {}); severity = l.get("severity", "critical")
-        ns, pod, alertname = l.get("namespace", "N/A"), l.get("pod", "N/A"), l.get("alertname", "Unknown")
-        
-        if METRIC_ALERTS_RECEIVED: METRIC_ALERTS_RECEIVED.labels(severity=severity, alertname=alertname).inc()
-        
-        deploy = l.get("deployment")
-        if not deploy:
-            if pod.count("-") >= 2: deploy = "-".join(pod.split("-")[:-2])
-            else: deploy = pod.split("-")[0] if "-" in pod else pod
-        inv_key = f"{ns}/{deploy}"; channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
-        if state_exists("investigations", inv_key): 
-            print(f"DEBUG: Alert {inv_key} already in active_investigations", flush=True)
+        try:
+            print(f"DEBUG: [START] workflow_critical for {alert.get('labels',{}).get('alertname')}", flush=True)
+            trace_id = str(uuid.uuid4()); l = alert.get("labels", {}); severity = l.get("severity", "critical")
+            ns, pod, alertname = l.get("namespace", "N/A"), l.get("pod", "N/A"), l.get("alertname", "Unknown")
+            
+            if METRIC_ALERTS_RECEIVED: 
+                try: METRIC_ALERTS_RECEIVED.labels(severity=severity, alertname=alertname).inc()
+                except Exception as me: print(f"DEBUG: Metric Error: {me}", flush=True)
+            
+            deploy = l.get("deployment")
+            if not deploy:
+                if pod.count("-") >= 2: deploy = "-".join(pod.split("-")[:-2])
+                else: deploy = pod.split("-")[0] if "-" in pod else pod
+            
+            inv_key = f"{ns}/{deploy}"; channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
+            print(f"DEBUG: Checking investigation for {inv_key}", flush=True)
+            if state_exists("investigations", inv_key): 
+                print(f"DEBUG: Alert {inv_key} already in active_investigations", flush=True)
+                return
+            
+            state_set("investigations", inv_key, trace_id)
+            print(f"DEBUG: Sending initial alert to RC thread...", flush=True)
+            tid = send_to_rocket("orchestrator", f"🚨 **{severity.upper()}:** {alertname}\nNS: `{ns}` | Pod: `{pod}`", channel_override=channel)
+            print(f"DEBUG: RC Thread ID: {tid}", flush=True)
+        except Exception as e:
+            print(f"ERROR in workflow_critical: {e}", flush=True)
+            import traceback; traceback.print_exc()
             return
-        state_set("investigations", inv_key, trace_id)
-        print(f"DEBUG: Sending initial alert to RC thread...", flush=True)
-        tid = send_to_rocket("orchestrator", f"🚨 **{severity.upper()}:** {alertname}\nNS: `{ns}` | Pod: `{pod}`", channel_override=channel)
-        print(f"DEBUG: RC Thread ID: {tid}", flush=True)
         
         # Phase 1: Gather evidence (fast)
         print(f"DEBUG: Querying Loki and Prometheus for {deploy}...", flush=True)
