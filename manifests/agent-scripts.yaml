@@ -190,23 +190,34 @@ data:
         except Exception as e: print(f"DEBUG: PM Scan Error: {e}", flush=True)
 
         print(f"DEBUG: Querying LLM for diagnosis...", flush=True)
-        pm_ctx = f"Contexto Histórico (Arquivos): {', '.join(rel_pm)}" if rel_pm else "Nenhum postmortem anterior encontrado."
-        res_info = json.dumps(manifest.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [{}])[0].get('resources', {}), indent=2)
+        pm_files = ", ".join(rel_pm) if rel_pm else "Nenhum encontrado"
+        current_res = json.dumps(manifest.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [{}])[0].get('resources', {}), indent=2)
         
-        sys_p = f"""Você é o SRE Analyst da Digital Twin. RESPOSTA EM PORTUGUÊS-BR.
-Formato Markdown Obrigatório:
-1. **Status**: Resumo técnico.
-2. **Evidências**:
-   - Logs: ```text\n{logs[:800]}\n```
-   - Métricas: {metrics}
-3. **Causa**: Explicação concisa.
-4. **Histórico**: {pm_ctx}
-5. **Correção**:
-   - **Atual**: ```yaml\n{res_info}\n```
-   - **Sugerido**: ```yaml\nresources:\n  limits:\n    memory: "128Mi"\n```
-Use emojis e seja direto."""
-
-        diag, _ = query_llm("SRE Analyst", f"Data: {sys_p}\n\nManifest: {json.dumps(manifest)[:1500]}", 1000)
+        sys_p = f"""Você é o SRE Analyst da Digital Twin. RESPOSTA EM PORTUGUÊS (BRASIL).
+Siga este formato Markdown RIGOROSAMENTE:
+1. **Resumo do Incidente**: O que está acontecendo e impacto.
+2. **Evidências Técnicas**: 
+   - **Logs do Loki**:
+   ```text
+   {logs[:800].replace('`', "'")}
+   ```
+   - **Métricas Prometheus**: {metrics}
+3. **Análise de Causa Raiz**: O porquê técnico (ex: OOM, Limits).
+4. **Contexto Histórico**: Postmortems relacionados: {pm_files}.
+5. **Sugestão de Correção**:
+   - **Trecho Atual (YAML)**:
+   ```yaml
+   {current_res}
+   ```
+   - **Trecho Sugerido (YAML)**:
+   ```yaml
+   resources:
+     limits:
+       memory: "128Mi"
+       cpu: "100m"
+   ```
+"""
+        diag, _ = query_llm(sys_p, f"Incident: {alertname} in {deploy}. Respond in Portuguese.", 1000)
         print(f"DEBUG: LLM Diag received", flush=True)
         send_to_rocket("analyst", f"🔍 **Diagnóstico Detalhado**\n{diag}", thread_id=tid, channel_override=channel)
         
