@@ -33,7 +33,7 @@ spec:
       # 1. Orchestrator
       - name: orchestrator
         image: python:3.9-slim
-        command: ["/bin/sh", "-c", "apt-get update && apt-get install -y git && pip install psycopg2-binary PyYAML redis && python3 /scripts/orchestrator_v7.py"]
+        command: ["/bin/sh", "-c", "apt-get update && apt-get install -y git && pip install psycopg2-binary PyYAML redis pika && python3 /scripts/orchestrator_v7.py"]
         env:
         - name: PYTHONUNBUFFERED
           value: "1"
