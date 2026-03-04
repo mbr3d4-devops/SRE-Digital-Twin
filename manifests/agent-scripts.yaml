@@ -446,109 +446,78 @@ data:
         clean_man = clean_manifest(manifest)
         action_data = {"alert": alert, "manifest_str": yaml.dump(clean_man, default_flow_style=False), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diag, "trace_id": trace_id, "thread_id": tid, "file_path": path, "channel": channel, "status": "pending"}
         state_set("pending", action_id, action_data)
-        print(f"DEBUG: Sending DevOps patch Proposal {action_id}...", flush=True)
-        
-        fix_text = f"🛠️ **GitOps Patch: {action_id}**\nSolução: {fix_desc}\n[🔍 Abrir no VSCode]({vscode_link})"
-        send_to_rocket("devops", fix_text, attachments=[{"actions": [{"type": "button", "text": "✅ Aprovar", "url": ORCH_URL+"/approve?id="+action_id}, {"type": "button", "text": "🌐 Ver no Git", "url": gitea_link}, {"type": "button", "text": "❌ Rejeitar", "url": ORCH_URL+"/reject?id="+action_id}]}], thread_id=tid, channel_override=channel)
-        print(f"DEBUG: process_llm_diagnosis completed for {action_id}", flush=True)
+        print(f"DEBUG: Invoking DevOps proposal for {action_id}...", flush=True)
+        executor.submit(devops_propose, action_id)
+        print(f"DEBUG: process_llm_diagnosis completed for {action_id} - handing over to devops", flush=True)
 
-    def handle_approve(action_id):
+    def devops_propose(action_id):
         a = state_get("pending", action_id)
-        if not a: return "Invalid"
-        if a["status"] != "pending": return "Processed"
-        a["status"] = "approved"
-        state_set("pending", action_id, a)
-        
+        if not a: return
         import subprocess
         GITEA_HTTP = "http://marcelo:password123@gitea-http.gitops.svc.cluster.local:3000/marcelo/target-app-infra.git"
         GITEA_API_BASE = "http://gitea-http.gitops.svc.cluster.local:3000/api/v1/repos/marcelo/target-app-infra"
         branch_name = f"fix/{action_id}"
         full_path = f"/repo/manifests/{a['file_path']}"
-        
         try:
-            # 1. Setup Git
             for cmd in [
                 ["git", "config", "--global", "user.email", "devops@sre.com"],
                 ["git", "config", "--global", "user.name", "AI DevOps"],
-                ["git", "config", "--global", "safe.directory", "/repo"],
+                ["git", "config", "--global", "safe.directory", "/repo"]
             ]: subprocess.run(cmd, cwd="/repo", capture_output=True)
-            
-            # 2. Reset to main and create fix branch
             subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
             subprocess.run(["git", "pull", GITEA_HTTP, "main"], cwd="/repo", capture_output=True)
             subprocess.run(["git", "checkout", "-b", branch_name], cwd="/repo", capture_output=True)
-            
-            # 3. Write manifest and commit
-            print(f"DEBUG: Writing fix to {full_path}", flush=True)
             os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            with open(full_path, 'w') as f:
-                f.write(a["manifest_str"])
+            with open(full_path, "w") as f: f.write(a["manifest_str"])
             subprocess.run(["git", "add", "."], cwd="/repo", capture_output=True)
             subprocess.run(["git", "commit", "-m", f"fix({a['deploy']}): {a['desc']}"], cwd="/repo", capture_output=True)
-            
-            # 4. Push branch to Gitea
-            result = subprocess.run(["git", "push", GITEA_HTTP, branch_name], cwd="/repo", capture_output=True)
-            if result.returncode != 0:
-                print(f"DEBUG: Push Error: {result.stderr.decode()}", flush=True)
+            if subprocess.run(["git", "push", GITEA_HTTP, branch_name], cwd="/repo", capture_output=True).returncode != 0:
                 send_to_rocket("devops", "❌ **ERRO:** Push da branch falhou.", thread_id=a["thread_id"], channel_override=a["channel"])
-                subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
-                subprocess.run(["git", "branch", "-D", branch_name], cwd="/repo", capture_output=True)
-                return "Error"
-            print(f"DEBUG: Branch {branch_name} pushed", flush=True)
-            
-            # 5. Create Pull Request via Gitea API
-            start_t = time.time()
-            pr_body = {"title": f"fix({a['deploy']}): {a['desc']}", "head": branch_name, "base": "main", "body": f"Correção automática pelo SRE DevOps Agent.\n\n**Alert:** {a['alert'].get('labels',{}).get('alertname','N/A')}\n**Diagnóstico:** {a['desc']}\n**Action ID:** {action_id}"}
+                return
+            pr_body = {"title": f"fix({a['deploy']}): {a['desc']}", "head": branch_name, "base": "main", "body": f"Trabalho do DevOps Agent.\n\n**Action ID:** {action_id}"}
             pr_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls", data=json.dumps(pr_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"})
             with urllib.request.urlopen(pr_req, timeout=15) as r:
                 pr_data = json.loads(r.read().decode())
                 pr_number = pr_data["number"]
                 pr_url = pr_data["html_url"]
-            if METRIC_TASK_LATENCY: METRIC_TASK_LATENCY.labels(phase="pr_creation").observe(time.time() - start_t)
             if METRIC_PR_CREATED: METRIC_PR_CREATED.inc()
-            print(f"DEBUG: PR #{pr_number} created: {pr_url}", flush=True)
-            
-            # 6. Notify Rocket.Chat with PR link
-            send_to_rocket("devops", f"📋 **Pull Request #{pr_number}** criado\n[🔗 Ver no Gitea]({pr_url.replace('gitea-http.gitops.svc.cluster.local:3000', 'gitea.127.0.0.1.nip.io:3000')})", thread_id=a["thread_id"], channel_override=a["channel"])
-            
-            # 7. Auto-merge the PR
-            merge_body = {"Do": "merge", "merge_message_field": f"Merge fix({a['deploy']}): {a['desc']}"}
-            merge_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls/{pr_number}/merge", data=json.dumps(merge_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"}, method="POST")
-            urllib.request.urlopen(merge_req, timeout=15)
-            print(f"DEBUG: PR #{pr_number} merged", flush=True)
-            
-            # 8. Cleanup: switch back to main and delete local branch
-            subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
-            subprocess.run(["git", "pull", GITEA_HTTP, "main"], cwd="/repo", capture_output=True)
-            subprocess.run(["git", "branch", "-D", branch_name], cwd="/repo", capture_output=True)
-            
-            # 9. Delete remote branch
-            try:
-                del_req = urllib.request.Request(f"{GITEA_API_BASE}/branches/{branch_name}", headers={"Authorization": "Basic " + GITEA_CREDS}, method="DELETE")
-                urllib.request.urlopen(del_req, timeout=10)
-            except: pass
-            
-            send_to_rocket("devops", f"🟢 **Merged & Sincronizado via GitOps (PR #{pr_number})**", thread_id=a["thread_id"], channel_override=a["channel"])
-            executor.submit(archivist_postmortem, a, action_id, a["trace_id"], a["thread_id"])
-            return "Success"
-        except Exception as e: 
-            print(f"DEBUG: PR Workflow Error: {e}", flush=True)
-            subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
-            try: subprocess.run(["git", "branch", "-D", branch_name], cwd="/repo", capture_output=True)
-            except: pass
-            send_to_rocket("devops", f"❌ **ERRO no PR Workflow:** {str(e)[:200]}", thread_id=a["thread_id"], channel_override=a["channel"])
-            return "Error"
+            send_to_rocket("devops", f"🛠️ **GitOps Patch: {action_id}**\nSolução gerada: {a['desc']}\n📋 **Pull Request #{pr_number} criado**\n[🔗 Ver no Gitea]({pr_url.replace('gitea-http.gitops.svc.cluster.local:3000', 'gitea.127.0.0.1.nip.io:3000')})", thread_id=a["thread_id"], channel_override=a["channel"])
+            executor.submit(warden_audit, action_id, pr_number, pr_url, branch_name)
+        except Exception as e:
+            send_to_rocket("devops", f"❌ **ERRO no DevOps Workflow:** {str(e)[:200]}", thread_id=a["thread_id"], channel_override=a["channel"])
 
-
-    def handle_reject(action_id):
+    def warden_audit(action_id, pr_number, pr_url, branch_name):
         a = state_get("pending", action_id)
-        if a:
-            a["status"] = "rejected"
-            state_set("pending", action_id, a)
-            send_to_rocket("devops", "🔴 **Rejeitado**", thread_id=a["thread_id"], channel_override=a["channel"])
-            inv_key = f"{a['ns']}/{a['deploy']}"
-            if state_get("investigations", inv_key) == a["trace_id"]: state_del("investigations", inv_key)
-        return "Rejected"
+        if not a: return
+        try:
+            GITEA_API_BASE = "http://gitea-http.gitops.svc.cluster.local:3000/api/v1/repos/marcelo/target-app-infra"
+            patch_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls/{pr_number}.patch", headers={"Authorization": "Basic " + GITEA_CREDS})
+            with urllib.request.urlopen(patch_req, timeout=15) as r: patch_data = r.read().decode()
+            warden_prompt = f"Você é The Warden, Juiz de Governança SRE. Audite este patch Kubernetes. É seguro para o cluster? Responda OBRIGATORIAMENTE com a palavra 'APPROVED' se seguro, ou 'REJECTED' se perigoso, seguido de uma breve justificativa em Português.\n\nPATCH:\n{patch_data}"
+            decision, _ = query_llm("Juiz de Governança.", warden_prompt, 300)
+            send_to_rocket("warden", f"🛡️ **Warden Audit Analysis**\n{decision}", thread_id=a["thread_id"], channel_override=a["channel"])
+            if "APPROVED" in decision.upper():
+                merge_body = {"Do": "merge", "merge_message_field": f"Merge fix({a['deploy']}): {a['desc']}"}
+                merge_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls/{pr_number}/merge", data=json.dumps(merge_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"}, method="POST")
+                urllib.request.urlopen(merge_req, timeout=15)
+                send_to_rocket("warden", f"🟢 **Merge autorizado e executado**. Rollout do patch PR #{pr_number} em andamento.", thread_id=a["thread_id"], channel_override=a["channel"])
+                import subprocess
+                subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
+                subprocess.run(["git", "pull", "http://marcelo:password123@gitea-http.gitops.svc.cluster.local:3000/marcelo/target-app-infra.git", "main"], cwd="/repo", capture_output=True)
+                subprocess.run(["git", "branch", "-D", branch_name], cwd="/repo", capture_output=True)
+                try: urllib.request.urlopen(urllib.request.Request(f"{GITEA_API_BASE}/branches/{branch_name}", headers={"Authorization": "Basic " + GITEA_CREDS}, method="DELETE"), timeout=10)
+                except: pass
+                a["status"] = "approved"
+                state_set("pending", action_id, a)
+                executor.submit(archivist_postmortem, a, action_id, a["trace_id"], a["thread_id"])
+            else:
+                a["status"] = "rejected"
+                state_set("pending", action_id, a)
+                inv_key = f"{a['ns']}/{a['deploy']}"
+                if state_get("investigations", inv_key) == a["trace_id"]: state_del("investigations", inv_key)
+                send_to_rocket("warden", f"🔴 **Patch Rejeitado**. Incidentes devem ser analisados manualmente.", thread_id=a["thread_id"], channel_override=a["channel"])
+        except Exception as e:
+            send_to_rocket("warden", f"❌ **ERRO na Governança:** {str(e)[:200]}", thread_id=a["thread_id"], channel_override=a["channel"])
 
     class Handler(http.server.BaseHTTPRequestHandler):
         def do_POST(self):
