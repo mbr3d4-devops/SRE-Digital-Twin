@@ -3,8 +3,8 @@ kind: Deployment
 metadata:
   annotations:
     argocd.argoproj.io/tracking-id: ai-driven-apps:apps/Deployment:app-production/alert-target-app
-    deployment.kubernetes.io/revision: '7'
-    kubectl.kubernetes.io/last-applied-configuration: '{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"ai-driven-apps:apps/Deployment:app-production/alert-target-app","deployment.kubernetes.io/revision":"6"},"labels":{"app":"alert-target"},"name":"alert-target-app","namespace":"app-production"},"spec":{"progressDeadlineSeconds":600,"replicas":2,"revisionHistoryLimit":10,"selector":{"matchLabels":{"app":"alert-target"}},"strategy":{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"},"type":"RollingUpdate"},"template":{"metadata":{"annotations":{"restartedAt":"1772653620.2154775"},"creationTimestamp":null,"labels":{"app":"alert-target"}},"spec":{"containers":[{"image":"nginx:alpine","imagePullPolicy":"IfNotPresent","name":"web","ports":[{"containerPort":80,"protocol":"TCP"}],"resources":{"limits":{"cpu":"100m","memory":"18Mi"},"requests":{"cpu":"50m","memory":"18Mi"}},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File"}],"dnsPolicy":"ClusterFirst","restartPolicy":"Always","schedulerName":"default-scheduler","securityContext":{},"terminationGracePeriodSeconds":30}}}}
+    deployment.kubernetes.io/revision: '9'
+    kubectl.kubernetes.io/last-applied-configuration: '{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{"argocd.argoproj.io/tracking-id":"ai-driven-apps:apps/Deployment:app-production/alert-target-app","deployment.kubernetes.io/revision":"7"},"labels":{"app":"alert-target"},"name":"alert-target-app","namespace":"app-production"},"spec":{"progressDeadlineSeconds":600,"replicas":2,"revisionHistoryLimit":10,"selector":{"matchLabels":{"app":"alert-target"}},"strategy":{"rollingUpdate":{"maxSurge":"25%","maxUnavailable":"25%"},"type":"RollingUpdate"},"template":{"metadata":{"annotations":{"restartedAt":"1772653968.1061552"},"creationTimestamp":null,"labels":{"app":"alert-target"}},"spec":{"containers":[{"image":"nginx:alpine","imagePullPolicy":"IfNotPresent","name":"web","ports":[{"containerPort":80,"protocol":"TCP"}],"resources":{"limits":{"cpu":"100m","memory":"128Mi"},"requests":{"cpu":"50m","memory":"128Mi"}},"terminationMessagePath":"/dev/termination-log","terminationMessagePolicy":"File"}],"dnsPolicy":"ClusterFirst","restartPolicy":"Always","schedulerName":"default-scheduler","securityContext":{},"terminationGracePeriodSeconds":30}}}}
 
       '
   labels:
@@ -26,7 +26,7 @@ spec:
   template:
     metadata:
       annotations:
-        restartedAt: '1772653968.1061552'
+        restartedAt: '1772655101.2733505'
       creationTimestamp: null
       labels:
         app: alert-target
@@ -41,9 +41,6 @@ spec:
         resources:
           limits:
             cpu: 100m
-            memory: 128Mi
-          requests:
-            cpu: 50m
             memory: 128Mi
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
