@@ -493,7 +493,7 @@ data:
             GITEA_API_BASE = "http://gitea-http.gitops.svc.cluster.local:3000/api/v1/repos/marcelo/target-app-infra"
             patch_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls/{pr_number}.patch", headers={"Authorization": "Basic " + GITEA_CREDS})
             with urllib.request.urlopen(patch_req, timeout=15) as r: patch_data = r.read().decode()
-            warden_prompt = f"Você é The Warden, Juiz de Governança SRE. Audite este patch Kubernetes. É seguro para o cluster? Responda OBRIGATORIAMENTE com a palavra 'APPROVED' se seguro, ou 'REJECTED' se perigoso, seguido de uma breve justificativa em Português.\n\nPATCH:\n{patch_data}"
+            warden_prompt = f"Você é The Warden, Juiz de Governança SRE. Audite este patch. Se a alteração ajustar limites de recursos (resources) ou o campo 'restartedAt' para reiniciar pods e mitigar alertas, considere seguro. Responda OBRIGATORIAMENTE com 'APPROVED' se seguro, ou 'REJECTED' se destrutivo.\n\nPATCH:\n{patch_data}"
             decision, _ = query_llm("Juiz de Governança.", warden_prompt, 300)
             send_to_rocket("warden", f"🛡️ **Warden Audit Analysis**\n{decision}", thread_id=a["thread_id"], channel_override=a["channel"])
             if "APPROVED" in decision.upper():
