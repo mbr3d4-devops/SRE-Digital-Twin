@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: fedora-host-metrics
+  namespace: monitoring
+subsets:
+- addresses:
+  - ip: 172.18.0.1
+  ports:
+  - name: node-exporter
+    port: 9100
+  - name: gpu-exporter
+    port: 9400
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fedora-host-metrics
+  namespace: monitoring
+  labels:
+    monitor: "true"
+spec:
+  ports:
+  - name: node-exporter
+    port: 9100
+    targetPort: 9100
+  - name: gpu-exporter
+    port: 9400
+    targetPort: 9400
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: fedora-host-metrics-monitor
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      monitor: "true"
+  namespaceSelector:
+    matchNames:
+    - monitoring
+  endpoints:
+  - port: node-exporter
+    interval: 30s
+  - port: gpu-exporter
+    interval: 30s
