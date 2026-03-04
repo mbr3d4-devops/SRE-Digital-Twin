@@ -119,11 +119,16 @@ data:
         except: return "Loki Error"
     
     def query_prometheus(app):
-        u = f"{PROM_URL}?query=sum(rate(container_cpu_usage_seconds_total{{pod=~'.*{app}.*'}}[5m]))"
+        u_cpu = f"{PROM_URL}?query=sum(rate(container_cpu_usage_seconds_total{{pod=~'.*{app}.*'}}[5m]))"
+        u_mem = f"{PROM_URL}?query=sum(container_memory_usage_bytes{{pod=~'.*{app}.*'}})"
         try:
-            with urllib.request.urlopen(u) as r:
-                res = json.loads(r.read().decode()); v = res["data"]["result"][0]["value"][1] if res["data"]["result"] else "0"
-                return f"CPU: {float(v):.4f}"
+            with urllib.request.urlopen(u_cpu) as r:
+                res = json.loads(r.read().decode())
+                v_cpu = res["data"]["result"][0]["value"][1] if res["data"]["result"] else "0"
+            with urllib.request.urlopen(u_mem) as r:
+                res = json.loads(r.read().decode())
+                v_mem = res["data"]["result"][0]["value"][1] if res["data"]["result"] else "0"
+            return f"CPU: {float(v_cpu):.4f} cores, RAM: {int(float(v_mem))/1024/1024:.2f} Mi"
         except: return "Prom Error"
     
     def wait_for_resource_health(deploy, ns, timeout=120):
@@ -173,11 +178,30 @@ data:
         print(f"DEBUG: Querying K8s manifest for {deploy} in {ns}...", flush=True)
         c, manifest = k8s_request("GET", f"/apis/apps/v1/namespaces/{ns}/deployments/{deploy}")
         
+        rel_pm = []
+        try: rel_pm = [f for f in os.listdir("/repo/postmortems") if alertname.lower() in f.lower() or deploy.lower() in f.lower()]
+        except: pass
+
         print(f"DEBUG: Querying LLM for diagnosis...", flush=True)
-        sys_p = "RESPONDA OBRIGATORIAMENTE EM PORTUGUÊS (BRASIL). Use 3 parágrafos e markdown. SRE Analyst."
-        diag, _ = query_llm(sys_p, f"Alert: {alertname}\nLogs: {logs}\nMetrics: {metrics}\nManifest: {json.dumps(manifest)}", 800)
+        sys_p = f"""Você é um SRE Analyst Especialista da Digital Twin. RESPONDA OBRIGATORIAMENTE EM PORTUGUÊS (BRASIL).
+Siga rigorosamente este formato Markdown:
+1. **Resumo do Incidente**: O que está acontecendo e o impacto imediato.
+2. **Evidências Técnicas**: 
+   - **Logs Recentes (Loki)**:
+   ```
+   {{logs}}
+   ```
+   - **Métricas Atuais (Prometheus)**: {{metrics}}
+3. **Análise de Causa Raiz**: O "porquê" técnico do problema.
+4. **Contexto Histórico**: Relacionar com estes postmortems se existirem: {rel_pm if rel_pm else 'Nenhum postmortem anterior encontrado'}.
+5. **Sugestão de Correção**:
+   - **Trecho do Problema**: Bloco de código YAML mostrando a causa.
+   - **Trecho da Solução**: Bloco de código YAML com a correção sugerida.
+Seja técnico, direto e use emojis para facilitar a leitura no Rocket.Chat."""
+        
+        diag, _ = query_llm(sys_p.format(logs=logs, metrics=metrics), f"Alert: {alertname}\nManifest: {json.dumps(manifest)}", 1000)
         print(f"DEBUG: LLM Diag received", flush=True)
-        send_to_rocket("analyst", f"🔍 **Diagnóstico**\n{diag}", thread_id=tid, channel_override=channel)
+        send_to_rocket("analyst", f"🔍 **Diagnóstico Detalhado**\n{diag}", thread_id=tid, channel_override=channel)
         
         action_id = hashlib.md5((alertname+ns+pod+str(time.time())).encode()).hexdigest()[:12]
         fix_desc = "Rollout Restart"
