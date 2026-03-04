@@ -251,8 +251,11 @@ data:
                 d = json.loads(self.rfile.read(int(self.headers["Content-Length"])).decode())
                 print(f"DEBUG: POST received with {len(d.get('alerts',[]))} alerts", flush=True)
                 for a in d.get("alerts", []):
-                    if a.get("status") == "resolved": continue
                     l = a.get("labels", {}); alertname = l.get("alertname", ""); severity = l.get("severity", "unknown")
+                    if a.get("status") == "resolved":
+                        channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
+                        send_to_rocket("orchestrator", f"🟢 **INCIDENTE RESOLVIDO:** {alertname}\nO sistema estabilizou.", channel_override=channel)
+                        continue
                     print(f"DEBUG: Routing alert {alertname} ({severity})", flush=True)
                     if severity == "critical" or "Watchdog" in alertname or alertname == "KubePodCrashLooping": executor.submit(workflow_critical, a)
                     else: send_to_rocket("analyst", f"⚠️ **Monitoramento:** {alertname}", channel_override="#ops-logs")
