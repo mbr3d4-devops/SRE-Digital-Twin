@@ -461,14 +461,14 @@ data:
             print(f"DEBUG: Branch {branch_name} pushed", flush=True)
             
             # 5. Create Pull Request via Gitea API
-            if METRIC_TASK_LATENCY: timer = METRIC_TASK_LATENCY.labels(phase="pr_creation").time()
+            start_t = time.time()
             pr_body = {"title": f"fix({a['deploy']}): {a['desc']}", "head": branch_name, "base": "main", "body": f"Correção automática pelo SRE DevOps Agent.\n\n**Alert:** {a['alert'].get('labels',{}).get('alertname','N/A')}\n**Diagnóstico:** {a['desc']}\n**Action ID:** {action_id}"}
             pr_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls", data=json.dumps(pr_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"})
             with urllib.request.urlopen(pr_req, timeout=15) as r:
                 pr_data = json.loads(r.read().decode())
                 pr_number = pr_data["number"]
                 pr_url = pr_data["html_url"]
-            if METRIC_TASK_LATENCY: timer.stop()
+            if METRIC_TASK_LATENCY: METRIC_TASK_LATENCY.labels(phase="pr_creation").observe(time.time() - start_t)
             if METRIC_PR_CREATED: METRIC_PR_CREATED.inc()
             print(f"DEBUG: PR #{pr_number} created: {pr_url}", flush=True)
             
