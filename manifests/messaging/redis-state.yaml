@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: redis-state
   namespace: ai-ops
+  labels:
+    app: redis-state
 spec:
   ports:
   - name: redis
