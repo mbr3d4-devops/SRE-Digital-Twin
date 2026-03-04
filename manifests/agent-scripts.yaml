@@ -163,7 +163,10 @@ data:
         print(f"DEBUG: Starting workflow_critical for {alert.get('labels',{}).get('alertname')}", flush=True)
         trace_id = str(uuid.uuid4()); l = alert.get("labels", {}); severity = l.get("severity", "critical")
         ns, pod, alertname = l.get("namespace", "N/A"), l.get("pod", "N/A"), l.get("alertname", "Unknown")
-        deploy = l.get("deployment", pod.rsplit("-", 2)[0] if "-" in pod else pod)
+        deploy = l.get("deployment")
+        if not deploy:
+            if pod.count("-") >= 2: deploy = "-".join(pod.split("-")[:-2])
+            else: deploy = pod.split("-")[0] if "-" in pod else pod
         inv_key = f"{ns}/{deploy}"; channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
         if inv_key in active_investigations: 
             print(f"DEBUG: Alert {inv_key} already in active_investigations", flush=True)
@@ -179,27 +182,31 @@ data:
         c, manifest = k8s_request("GET", f"/apis/apps/v1/namespaces/{ns}/deployments/{deploy}")
         
         rel_pm = []
-        try: rel_pm = [f for f in os.listdir("/repo/postmortems") if alertname.lower() in f.lower() or deploy.lower() in f.lower()]
-        except: pass
+        try:
+            pm_list = os.listdir("/repo/postmortems")
+            print(f"DEBUG: Scanning /repo/postmortems: {pm_list}", flush=True)
+            rel_pm = [f for f in pm_list if deploy.lower() in f.lower() or alertname.lower() in f.lower()]
+            print(f"DEBUG: Matches found: {rel_pm}", flush=True)
+        except Exception as e: print(f"DEBUG: PM Scan Error: {e}", flush=True)
 
         print(f"DEBUG: Querying LLM for diagnosis...", flush=True)
-        sys_p = f"""Você é um SRE Analyst Especialista da Digital Twin. RESPONDA OBRIGATORIAMENTE EM PORTUGUÊS (BRASIL).
-Siga rigorosamente este formato Markdown:
-1. **Resumo do Incidente**: O que está acontecendo e o impacto imediato.
-2. **Evidências Técnicas**: 
-   - **Logs Recentes (Loki)**:
-   ```
-   {logs}
-   ```
-   - **Métricas Atuais (Prometheus)**: {metrics}
-3. **Análise de Causa Raiz**: O "porquê" técnico do problema.
-4. **Contexto Histórico**: Relacionar com estes postmortems se existirem: {rel_pm if rel_pm else 'Nenhum postmortem anterior encontrado'}.
-5. **Sugestão de Correção**:
-   - **Trecho do Problema**: Bloco de código YAML mostrando a causa.
-   - **Trecho da Solução**: Bloco de código YAML com a correção sugerida.
-Seja técnico, direto e use emojis para facilitar a leitura no Rocket.Chat."""
+        pm_ctx = f"Contexto Histórico (Arquivos): {', '.join(rel_pm)}" if rel_pm else "Nenhum postmortem anterior encontrado."
+        res_info = json.dumps(manifest.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [{}])[0].get('resources', {}), indent=2)
         
-        diag, _ = query_llm(sys_p, f"Alert: {alertname}\nManifest: {json.dumps(manifest)}", 1000)
+        sys_p = f"""Você é o SRE Analyst da Digital Twin. RESPOSTA EM PORTUGUÊS-BR.
+Formato Markdown Obrigatório:
+1. **Status**: Resumo técnico.
+2. **Evidências**:
+   - Logs: ```text\n{logs[:800]}\n```
+   - Métricas: {metrics}
+3. **Causa**: Explicação concisa.
+4. **Histórico**: {pm_ctx}
+5. **Correção**:
+   - **Atual**: ```yaml\n{res_info}\n```
+   - **Sugerido**: ```yaml\nresources:\n  limits:\n    memory: "128Mi"\n```
+Use emojis e seja direto."""
+
+        diag, _ = query_llm("SRE Analyst", f"Data: {sys_p}\n\nManifest: {json.dumps(manifest)[:1500]}", 1000)
         print(f"DEBUG: LLM Diag received", flush=True)
         send_to_rocket("analyst", f"🔍 **Diagnóstico Detalhado**\n{diag}", thread_id=tid, channel_override=channel)
         
