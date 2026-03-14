@@ -1,3 +1,24 @@
+# ##############################################################################
+# SRE COGNITIVE OS - TECHNICAL CHANGELOG
+# ##############################################################################
+# Snapshot: v0.9.2-runtime-stability-hotfix
+# Date: 2026-03-13
+# 
+# ARCHITECTURAL IMPROVEMENTS:
+# 1. ConfigMap Mapping Fix: Corrected __init__.py collisions in agent-deployments.yaml.
+# 2. Alert Deduplication: Implemented Redis fingerprinting in Orchestrator (10m TTL).
+# 3. Analyst Resilience: Explicit handling of contaminated AI output and error states.
+# 4. Warden Data Source: Shifted to raw JSON analysis (analysis_raw) to avoid hallucinations.
+# 5. Startup Optimization: Added idempotency guards for runtime dependencies (kubectl/pip).
+# 
+# CORE CONTRACTS:
+# - Mount Path: /etc/ai-ops/ (Governance, Agents, Scripts)
+# - Messaging: RabbitMQ (sre-ops vhost)
+# - State: Redis (db 0)
+# 
+# STATUS: STABLE / PRODUCTION-READY
+# ##############################################################################
+
 apiVersion: v1
 kind: ConfigMap
 metadata:
