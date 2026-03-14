@@ -4,6 +4,9 @@ metadata:
   name: agent-scripts
   namespace: ai-ops
 data:
+  runtime.__init__.py: ""
+  evidence_engine.__init__.py: ""
+  renderer.__init__.py: ""
   runtime.llm_gateway.py: |
     import json, urllib.request, re, os
     def clean_output(text):
@@ -113,6 +116,9 @@ data:
     from runtime.messaging import get_mq_conn, send_to_rocket
     from runtime.thread_manager import ThreadManager
     class WebhookHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/health': self.send_response(200); self.end_headers(); self.wfile.write(b'OK')
+            else: self.send_response(404); self.end_headers()
         def do_POST(self):
             data = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode())
             tm = ThreadManager()
