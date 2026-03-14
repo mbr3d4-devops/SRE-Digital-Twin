@@ -1,3 +1,18 @@
+# AIOPS PLATFORM CONSOLIDATED MANIFEST
+# VERSION: v0.9.0-cognitive-os-modularization
+# DESCRIPTION: Transição para Arquitetura SRE Cognitive OS (Kernel Modular)
+# 
+# CHANGE LOG:
+# - [CORE] Modularização total do sistema em diretórios /etc/ai-ops/ (Governance, Agents, Scripts).
+# - [CORE] Implementação de marcadores __init__.py em todos os pacotes do kernel para integridade de importação.
+# - [AGENT] Orchestrator: Adicionado endpoint de /health nativo em Python para Readiness Probe k8s.
+# - [AGENT] Analyst/Warden: Refatorados para utilizar a nova estrutura de pacotes 'evidence_engine' e 'renderer'.
+# - [K8S] Padronização de mounts e volumes usando 'items' mapping para evitar conflitos de chaves.
+# - [K8S] Decomissionamento de ReplicaSets legados e sincronização de seletores.
+# 
+# STATUS: STABLE / ENTERPRISE-READY
+# DATE: 2026-03-13
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
