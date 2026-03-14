@@ -91,6 +91,9 @@ metadata:
   name: agent-scripts
   namespace: ai-ops
 data:
+  runtime.__init__.py: ""
+  evidence_engine.__init__.py: ""
+  renderer.__init__.py: ""
   runtime.llm_gateway.py: |
     import json, urllib.request, re, os
     def clean_output(text):
@@ -200,6 +203,9 @@ data:
     from runtime.messaging import get_mq_conn, send_to_rocket
     from runtime.thread_manager import ThreadManager
     class WebhookHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if self.path == '/health': self.send_response(200); self.end_headers(); self.wfile.write(b'OK')
+            else: self.send_response(404); self.end_headers()
         def do_POST(self):
             data = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode())
             tm = ThreadManager()
@@ -333,15 +339,21 @@ spec:
           name: agent-scripts
           items:
           - key: runtime.llm_gateway.py
+            path: runtime/__init__.py
+          - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
           - key: runtime.messaging.py
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
           - key: evidence_engine.collectors.py
+            path: evidence_engine/__init__.py
+          - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
+          - key: renderer.forensic_markdown.py
+            path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
           - key: runtime.orchestrator.py
@@ -421,15 +433,21 @@ spec:
           name: agent-scripts
           items:
           - key: runtime.llm_gateway.py
+            path: runtime/__init__.py
+          - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
           - key: runtime.messaging.py
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
           - key: evidence_engine.collectors.py
+            path: evidence_engine/__init__.py
+          - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
+          - key: renderer.forensic_markdown.py
+            path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
           - key: runtime.orchestrator.py
@@ -551,15 +569,21 @@ spec:
           name: agent-scripts
           items:
           - key: runtime.llm_gateway.py
+            path: runtime/__init__.py
+          - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
           - key: runtime.messaging.py
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
           - key: evidence_engine.collectors.py
+            path: evidence_engine/__init__.py
+          - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
+          - key: renderer.forensic_markdown.py
+            path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
           - key: runtime.orchestrator.py
@@ -682,15 +706,21 @@ spec:
           name: agent-scripts
           items:
           - key: runtime.llm_gateway.py
+            path: runtime/__init__.py
+          - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
           - key: runtime.messaging.py
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
           - key: evidence_engine.collectors.py
+            path: evidence_engine/__init__.py
+          - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
+          - key: renderer.forensic_markdown.py
+            path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
           - key: runtime.orchestrator.py
@@ -814,15 +844,21 @@ spec:
           name: agent-scripts
           items:
           - key: runtime.llm_gateway.py
+            path: runtime/__init__.py
+          - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
           - key: runtime.messaging.py
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
           - key: evidence_engine.collectors.py
+            path: evidence_engine/__init__.py
+          - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
+          - key: renderer.forensic_markdown.py
+            path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
           - key: runtime.orchestrator.py
