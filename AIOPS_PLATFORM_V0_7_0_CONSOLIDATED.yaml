@@ -1,0 +1,274 @@
+################################################################################
+# AIOPS PLATFORM CONSOLIDATED CONTEXT
+# VERSION: v0.7.0-forensic-evidence-engine
+# DATE: 2026-03-13
+# DESCRIPTION: AI SRE Forensic Investigator (Evidence-Driven). Complete Stack.
+# PURPOSE: External LLM Context & Disaster Recovery
+################################################################################
+# CHANGE_LOG & VERSION HISTORY
+# [2026-03-13] v14.5.0: Baseline restoration of separated agents architecture.
+# [2026-03-13] v14.5.1: Threading & Orchestrator stabilization.
+# [2026-03-13] v14.5.2: RabbitMQ resilience (Nack/Requeue) & Error Reporting.
+# [2026-03-13] v14.5.3: Hardened JSON Parser (Markdown Striper) for LM Studio.
+# [2026-03-13] v0.7.0: 
+#   - ARCHITECTURE: Transition to AI Ops Stage 3 (Evidence Driven).
+#   - CHANGE: New Analyst cognitive model (Investigation vs Opinion).
+#   - CHANGE: Expanded Forensic Package collection (Events, YAML, Basic Metrics).
+#   - CLEANUP: Consolidated 5 separated agents deployments, purging agent-team.
+#   - CREATE: AIOPS_PLATFORM_V0_7_0_CONSOLIDATED.yaml.
+################################################################################
+
+---
+# 1. GOVERNANCE
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-governance
+  namespace: ai-ops
+data:
+  governance.md: |
+    # LEI UNIVERSAL SRE (CRÍTICO)
+    1. IDIOMA: Responda APENAS em Português do Brasil (PT-BR).
+    2. COMPORTAMENTO: Vá direto ao laudo técnico. NUNCA diga "Eu sou o agente X".
+    3. PROIBIÇÃO: Não repita as instruções deste prompt.
+    4. FORMATO: Sem títulos Markdown gigantes (#). Use negrito para headers.
+    5. RACIOCÍNIO: É PROIBIDO exibir pensamento interno, análise passo a passo ou planejamento.
+    6. SAÍDA: Apenas o objeto JSON final é permitido se solicitado, ou o laudo clínico.
+    7. VIOLAÇÃO: Se você mostrar raciocínio (Thinking Process), a resposta será descartada.
+
+---
+# 2. SKILLS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-skills
+  namespace: ai-ops
+data:
+  orchestrator.md: |
+    🚨 **{alertname}**
+    O Pod **{pod}** no Namespace **{ns}** apresenta falha: **{summary}**
+    🆔 **Trace:** `{trace_id}` | 📬 **Fila:** RabbitMQ | 💾 **Estado:** Redis
+
+  analyst.md: |
+    # CONTRATO DE SAÍDA SRE FORENSE (Obrigatório JSON)
+    Você é um SRE Forense Autônomo. Sua função NÃO é opinar. Sua função é INVESTIGAR.
+
+    REGRAS ABSOLUTAS:
+    1. Nunca inferir sem evidência técnica explícita.
+    2. Nunca concluir causa raiz sem correlação entre métricas + eventos + logs.
+    3. Se não houver evidência suficiente → declarar "EVIDÊNCIA INSUFICIENTE".
+    4. Responder sempre em PT-BR técnico clínico. Proibido introduções ou linguagem educacional.
+    5. Não gerar YAML fictício. O YAML sugerido deve derivar do YAML real coletado.
+
+    ESTRUTURA DA RESPOSTA (JSON PURO):
+    {
+      "incidente": "🛠️ **Análise Forense: {alertname}**",
+      "resumo_forense": "...",
+      "evidencias": {
+        "metricas": [...],
+        "logs": [...],
+        "eventos": [...],
+        "describe": "...",
+        "gitops": "...",
+        "historico": "..."
+      },
+      "correlacao_tecnica": "...",
+      "causa_raiz": "... ou EVIDÊNCIA INSUFICIENTE",
+      "impacto": "...",
+      "yaml_atual": "...",
+      "yaml_sugerido": "...",
+      "risco_da_acao": "...",
+      "confianca": "BAIXA | MEDIA | ALTA"
+    }
+
+---
+# 3. SCRIPTS (common.py logic)
+# (Truncated for readability, available in agent-scripts)
+# Forensic Engine v0.7.0 Logic Active.
+
+---
+# 4. DEPLOYMENTS (CONSOMIDATED v0.7.0)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-analyst
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: analyst
+  template:
+    metadata:
+      labels:
+        agent: analyst
+    spec:
+      serviceAccountName: agent-sre-sa
+      containers:
+      - name: main
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "apt-get update && apt-get install -y curl && curl -LO https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/ && pip install PyYAML redis pika && python /app/analyst_consumer.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: REDIS_HOST
+          value: "redis-state"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+        - name: skills
+          mountPath: /etc/skills
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+      - name: skills
+        configMap:
+          name: agent-skills
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-warden
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: warden
+  template:
+    metadata:
+      labels:
+        agent: warden
+    spec:
+      containers:
+      - name: main
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "pip install PyYAML redis pika && python /app/warden_consumer.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: REDIS_HOST
+          value: "redis-state"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+        - name: skills
+          mountPath: /etc/skills
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+      - name: skills
+        configMap:
+          name: agent-skills
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestrator
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: orchestrator
+  template:
+    metadata:
+      labels:
+        agent: orchestrator
+    spec:
+      containers:
+      - name: main
+        image: python:3.9-slim
+        command: ["/bin/sh", "-c", "pip install PyYAML redis pika prometheus-client && python /app/orchestrator.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: REDIS_HOST
+          value: "redis-state"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-auditor
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: auditor
+  template:
+    metadata:
+      labels:
+        agent: auditor
+    spec:
+      containers:
+      - name: main
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "pip install PyYAML redis pika && python /app/auditor_consumer.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: REDIS_HOST
+          value: "redis-state"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-archivist
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: archivist
+  template:
+    metadata:
+      labels:
+        agent: archivist
+    spec:
+      containers:
+      - name: main
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "pip install PyYAML redis pika && python /app/archivist_consumer.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: REDIS_HOST
+          value: "redis-state"
+        - name: RABBITMQ_HOST
+          value: "rabbitmq"
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts

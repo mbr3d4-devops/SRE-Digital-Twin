@@ -1,0 +1,23 @@
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  # Mapear as portas do Host (Fedora) para o Ingress Controller e Gitea
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    protocol: TCP
+  - containerPort: 443
+    hostPort: 443
+    protocol: TCP
+  - containerPort: 3000
+    hostPort: 3000
+    protocol: TCP # Porta para o Gitea UI/HTTP
+  - containerPort: 2222
+    hostPort: 2222
+    protocol: TCP # Porta para o Gitea SSH
+
+  # Mapear o diretório de infraestrutura do Fedora para dentro do Node do Kind
+  extraMounts:
+  - hostPath: /home/marcelo/lab-infra-repo
+    containerPath: /home/marcelo/lab-infra-repo

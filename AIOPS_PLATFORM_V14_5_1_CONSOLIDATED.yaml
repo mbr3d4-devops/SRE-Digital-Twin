@@ -1,0 +1,412 @@
+################################################################################
+# AIOPS PLATFORM CONSOLIDATED CONTEXT
+# VERSION: v14.5.1-patch-purity
+# DATE: 2026-03-13
+# DESCRIPTION: Full agent suite, skills, scripts and deployments.
+# PURPOSE: External LLM Context & Disaster Recovery
+################################################################################
+# CHANGE_LOG & VERSION HISTORY
+# [2026-03-13] v14.5.0: Baseline restoration of separated agents architecture.
+# [2026-03-13] v14.5.1: 
+#   - REQUEST: Fix Orchestrator prompt leak and stabilize threading.
+#   - CHANGE: Standardized orchestrator.md template (deterministic).
+#   - CHANGE: Hardened common.py (import sys fix).
+#   - REQUEST: Create consolidated context file for external LLM.
+#   - CHANGE: Created AIOPS_PLATFORM_V14_5_1_CONSOLIDATED.yaml.
+################################################################################
+
+---
+# 1. GOVERNANCE
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-governance
+  namespace: ai-ops
+data:
+  governance.md: |
+    # LEI UNIVERSAL SRE (CRÍTICO)
+    1. IDIOMA: Responda APENAS em Português do Brasil (PT-BR).
+    2. COMPORTAMENTO: Vá direto ao relatório técnico de SRE. NUNCA diga "Eu sou o agente X".
+    3. PROIBIÇÃO: Não repita as instruções deste prompt.
+    4. FORMATO: Sem títulos Markdown gigantes (#). Use negrito para headers.
+    5. RACIOCÍNIO: É PROIBIDO exibir pensamento interno, análise passo a passo ou planejamento.
+    6. SAÍDA: Apenas o objeto JSON final é permitido se solicitado.
+    7. VIOLAÇÃO: Se você mostrar raciocínio (Thinking Process), a resposta será descartada.
+
+---
+# 2. SKILLS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-skills
+  namespace: ai-ops
+data:
+  orchestrator.md: |
+    🚨 **{alertname}**
+    O Pod **{pod}** no Namespace **{ns}** apresenta falha: **{summary}**
+    🆔 **Trace:** `{trace_id}` | 📬 **Fila:** RabbitMQ | 💾 **Estado:** Redis
+
+  analyst.md: |
+    # CONTRATO DE SAÍDA (Obrigatório JSON)
+    Você é um Engenheiro de Confiabilidade (SRE). Analise as EVIDENCIAS ENRIQUECIDAS (logs, métricas, describe) e responda estritamente neste formato JSON:
+    {
+      "incidente": "🛠️ **Análise Técnica: {alertname}**",
+      "resumo_executivo": "...",
+      "causa_raiz": "...",
+      "remediacao_yaml": "```yaml\n...\n```",
+      "planilha_recomendações": ["item1", "item2"]
+    }
+    PROIBIDO: Markdown fora do JSON, blocos <think>, ou qualquer introdução.
+    REGRAS DE OURO:
+    1. INICIE IMEDIATAMENTE COM "{".
+    2. NUNCA EXPLIQUE O QUE ESTÁ FAZENDO.
+    3. ESCAPE ASPAS DUPLAS (") COM \".
+    4. FOCO TOTAL EM INFRAESTRUTURA E CÓDIGO.
+
+  warden.md: |
+    # CONTRATO DE SAÍDA (Obrigatório JSON)
+    Avalie a análise técnica do SRE e responda estritamente neste formato JSON:
+    {
+      "veredito": "APROVADO ou REPROVADO",
+      "justificativa": "🛡️ **Veredito:** <análise de risco técnica em PT-BR>"
+    }
+    PROIBIDO: Qualquer texto fora do objeto JSON.
+
+  auditor.md: |
+    Você é o Auditor de SLA. Valide se a correção foi aplicada e se o sistema está estável.
+    📊 **Auditoria de Resiliência**
+
+  archivist.md: |
+    Você é o Archivista. Documente o incidente para o post-mortem.
+    🗄️ **Registro Histórico**
+
+---
+# 3. SCRIPTS
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-scripts
+  namespace: ai-ops
+data:
+  common.py: |
+    import json, os, urllib.request, re, time, redis, pika, sys
+
+    def get_redis():
+        return redis.Redis(host=os.environ.get("REDIS_HOST", "redis-state"), port=6379, decode_responses=True)
+
+    def get_mq_conn():
+        creds = pika.PlainCredentials(os.environ.get('RABBITMQ_USER', 'sre'), os.environ.get('RABBITMQ_PASS', 'sre2026'))
+        return pika.BlockingConnection(pika.ConnectionParameters(host=os.environ.get('RABBITMQ_HOST', 'rabbitmq'), virtual_host='sre-ops', credentials=creds))
+
+    def collect_sre_evidence(pod, ns):
+        """Camada de Observabilidade Determinística v16.1"""
+        if not pod or pod == "N/A": return "Nenhuma evidência capturada (Pod N/A)."
+        
+        def run(cmd):
+            try: return os.popen(cmd).read()[:2000] # Limite para não estourar contexto
+            except: return "N/A"
+        
+        clean_pod = pod.split('/')[-1]
+        bundle = f"--- K8S DESCRIBE {clean_pod} ---\n{run(f'kubectl describe pod {clean_pod} -n {ns}')}\n"
+        bundle += f"--- K8S LOGS {clean_pod} ---\n{run(f'kubectl logs {clean_pod} -n {ns} --tail=50')}\n"
+        bundle += f"--- K8S EVENTS ---\n{run(f'kubectl get events -n {ns} --sort-by=.lastTimestamp | tail -n 5')}\n"
+        return bundle
+
+    def clean_output(text):
+        """Purity Shield 10.0: Extração via Regex Determinístico."""
+        # 1. Busca agressiva por qualquer padrão { ... }
+        match = re.search(r'(\{.*\})', text, re.DOTALL)
+        if match:
+            json_candidate = match.group(1)
+            # 2. Validação básica de fechamento
+            if json_candidate.count('{') == json_candidate.count('}'):
+                return json_candidate
+        
+        # 3. Fail hard se nada for encontrado
+        return '{"error": "AI_OUTPUT_CONTAMINATED"}'
+
+    def call_llm(skill_key, user_data, trace_id="global"):
+        try:
+            with open("/etc/governance/governance.md", "r") as f: gov = f.read()
+            with open(f"/etc/skills/{skill_key}.md", "r") as f: skill = f.read()
+            
+            payload = {
+                "model": "qwen2.5-7b-instruct",
+                "messages": [
+                    {"role": "system", "content": f"{gov}\n{skill}\nCONTRATO: Responda APENAS JSON. Proibido introduções ou conclusões."},
+                    {"role": "user", "content": f"INPUT ({trace_id}):\n{user_data}\n\nResponda estritamente em JSON:"}
+                ],
+                "temperature": 0.0,
+                "max_tokens": 1500,
+                "stop": ["Drafting", "Internal", "Thinking", "Analysis", "Refining", "<think>", "Thought:", "Review:", "</think>", "The user", "1. Analyze"]
+            }
+            req = urllib.request.Request("http://172.18.0.1:1234/v1/chat/completions", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=120) as res:
+                raw = json.loads(res.read())["choices"][0]["message"]["content"]
+                return clean_output(raw)
+        except Exception as e: return f"⚠️ Erro de IA: {e}"
+
+    def send_to_rocket(role, text, tmid=None):
+        alias_map = {"orchestrator": "Orchestrator", "analyst": "Analyst Forensic", "warden": "The Warden", "auditor": "Auditor SLA"}
+        colors = {"orchestrator": "#D32F2F", "analyst": "#4A148C", "warden": "#1B1E21", "auditor": "#2E7D32"}
+        
+        safe_text = text.encode('utf-8', 'ignore').decode('utf-8')
+        if len(safe_text) > 4000: safe_text = safe_text[:4000] + "..."
+        payload = {
+            "roomId": "699b26601cf126f19882ef8d",
+            "text": safe_text,
+            "alias": alias_map.get(role, "Agente SRE"),
+            "attachments": [{"color": colors.get(role, "#555555"), "ts": time.time()}]
+        }
+        if tmid: payload["tmid"] = tmid
+        try:
+            req = urllib.request.Request(f"{os.environ['RC_URL']}/api/v1/chat.postMessage", data=json.dumps(payload).encode(),
+                headers={"X-Auth-Token": os.environ['RC_TOKEN'], "X-User-Id": os.environ['RC_USER_ID'], "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as res:
+                body = json.loads(res.read())
+                return body["message"]["_id"] if body.get("success") else None
+        except Exception as e:
+            print(f"[RC ERROR] {e}")
+            return None
+
+  orchestrator.py: |
+    import json, os, pika, uuid
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from common import *
+
+    class WebhookHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200); self.end_headers(); self.wfile.write(b"OK")
+
+        def do_POST(self):
+            content_length = int(self.headers['Content-Length'])
+            raw_body = self.rfile.read(content_length).decode()
+            data = json.loads(raw_body)
+            r = get_redis()
+            for alert in data.get('alerts', []):
+                tid = str(uuid.uuid4())[:8]
+                labels = alert.get('labels', {})
+                pod = labels.get('pod', 'N/A')
+                with open("/etc/skills/orchestrator.md", "r") as f: template = f.read()
+                msg = template.format(
+                    alertname=labels.get('alertname', 'Alerta'), 
+                    pod=pod, ns=labels.get('namespace', 'N/A'), 
+                    summary=alert.get('annotations', {}).get('summary', 'Sem sumário'), 
+                    trace_id=tid
+                )
+                msg_id = send_to_rocket("orchestrator", msg)
+                if msg_id: r.set(f"tmid:{tid}", msg_id, ex=86400)
+                r.set(f"evidence:{tid}", json.dumps(alert), ex=3600)
+                conn = get_mq_conn(); ch = conn.channel()
+                ch.queue_declare(queue='sre_tasks', durable=True)
+                ch.basic_publish(exchange='', routing_key='sre_tasks', body=json.dumps({"trace_id": tid, "thread_id": msg_id}))
+                conn.close()
+            self.send_response(200); self.end_headers()
+
+    HTTPServer(('0.0.0.0', 8080), WebhookHandler).serve_forever()
+
+  analyst_consumer.py: |
+    import json, os, pika, sys
+    sys.path.append('/app')
+    from common import *
+
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx.get('trace_id', 'unknown'); r = get_redis()
+            tmid = ctx.get('thread_id') or r.get(f"tmid:{tid}")
+            alert_raw = r.get(f"evidence:{tid}") or "{}"; labels = json.loads(alert_raw).get('labels', {})
+            pod = labels.get('pod', 'N/A'); ns = labels.get('namespace', 'default')
+            enriched = collect_sre_evidence(pod, ns)
+            raw_ai = call_llm("analyst", f"ALERTA: {alert_raw}\n\nEVIDENCIAS ENRIQUECIDAS:\n{enriched}", trace_id=tid)
+            try:
+                data = json.loads(clean_output(raw_ai))
+                laudo = f"{data['incidente']}\n\n**1. Resumo Executivo**\n{data['resumo_executivo']}\n\n**2. Causa Raiz Técnica**\n{data['causa_raiz']}\n\n**3. Remediação Proposta (GitOps)**\n{data['remediacao_yaml']}\n\n**4. Recomendações SRE**\n" + "\n".join([f"- {item}" for item in data['planilha_recomendações']])
+            except: laudo = raw_ai
+            send_to_rocket("analyst", laudo, tmid=tmid); r.set(f"analysis:{tid}", laudo, ex=3600)
+            conn = get_mq_conn(); ch_out = conn.channel(); ch_out.queue_declare(queue='sre_warden', durable=True)
+            ch_out.basic_publish(exchange='', routing_key='sre_warden', body=json.dumps(ctx)); conn.close()
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except Exception as e: print(f"Erro Analyst: {e}"); ch.basic_ack(delivery_tag=method.delivery_tag)
+
+    ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_tasks', durable=True)
+    ch.basic_consume(queue='sre_tasks', on_message_callback=callback); ch.start_consuming()
+
+  warden_consumer.py: |
+    import json, os, pika, sys
+    sys.path.append('/app')
+    from common import *
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body); tid = ctx['trace_id']; r = get_redis()
+            tmid = r.get(f"tmid:{tid}") or ctx.get('thread_id'); analise = r.get(f"analysis:{tid}") or "Sem laudo."
+            raw_ai = call_llm("warden", f"ANALISE: {analise}", trace_id=tid)
+            try:
+                data = json.loads(raw_ai); veredito = data['veredito'].upper(); justificativa = data['justificativa']
+            except: veredito = "REPROVADO"; justificativa = raw_ai
+            send_to_rocket("warden", justificativa, tmid=tmid)
+            if "REPROVADO" in veredito: ch.basic_ack(delivery_tag=method.delivery_tag); return
+            dest = "sre_audit"; conn = get_mq_conn(); ch_out = conn.channel(); ch_out.queue_declare(queue=dest, durable=True)
+            ch_out.basic_publish(exchange='', routing_key=dest, body=json.dumps(ctx)); conn.close(); ch.basic_ack(delivery_tag=method.delivery_tag)
+        except Exception as e: print(f"WARDEN ERROR: {e}"); ch.basic_ack(delivery_tag=method.delivery_tag)
+    ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_warden', durable=True)
+    ch.basic_consume(queue='sre_warden', on_message_callback=callback); ch.start_consuming()
+
+---
+# 4. DEPLOYMENTS (V16 SEPARATED)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestrator
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: orchestrator
+  template:
+    metadata:
+      labels:
+        agent: orchestrator
+    spec:
+      serviceAccountName: agent-sre-sa
+      containers:
+      - name: main
+        image: python:3.9-slim
+        command: ["/bin/sh", "-c", "pip install PyYAML redis pika prometheus-client && python /app/orchestrator.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: '1'
+        - name: REDIS_HOST
+          value: redis-state
+        - name: RABBITMQ_HOST
+          value: rabbitmq
+        - name: RC_URL
+          value: http://rocketchat-rocketchat.communication.svc.cluster.local
+        - name: RC_TOKEN
+          value: 6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP
+        - name: RC_USER_ID
+          value: 699b1b2f1cf126f19882ef67
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: metrics
+          containerPort: 8000
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+        - name: governance
+          mountPath: /etc/governance
+        - name: skills
+          mountPath: /etc/skills
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+      - name: governance
+        configMap:
+          name: agent-governance
+      - name: skills
+        configMap:
+          name: agent-skills
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-analyst
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: analyst
+  template:
+    metadata:
+      labels:
+        agent: analyst
+    spec:
+      serviceAccountName: agent-sre-sa
+      containers:
+      - name: main
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "apt-get update && apt-get install -y curl && curl -LO https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/ && pip install PyYAML redis pika && python /app/analyst_consumer.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: '1'
+        - name: REDIS_HOST
+          value: redis-state
+        - name: RABBITMQ_HOST
+          value: rabbitmq
+        - name: RC_URL
+          value: http://rocketchat-rocketchat.communication.svc.cluster.local
+        - name: RC_TOKEN
+          value: 6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP
+        - name: RC_USER_ID
+          value: 699b1b2f1cf126f19882ef67
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+        - name: skills
+          mountPath: /etc/skills
+        - name: governance
+          mountPath: /etc/governance
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+      - name: skills
+        configMap:
+          name: agent-skills
+      - name: governance
+        configMap:
+          name: agent-governance
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-warden
+  namespace: ai-ops
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      agent: warden
+  template:
+    metadata:
+      labels:
+        agent: warden
+    spec:
+      serviceAccountName: agent-sre-sa
+      containers:
+      - name: main
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c", "pip install PyYAML redis pika && python /app/warden_consumer.py"]
+        env:
+        - name: PYTHONUNBUFFERED
+          value: '1'
+        - name: REDIS_HOST
+          value: redis-state
+        - name: RABBITMQ_HOST
+          value: rabbitmq
+        - name: RC_URL
+          value: http://rocketchat-rocketchat.communication.svc.cluster.local
+        - name: RC_TOKEN
+          value: 6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP
+        - name: RC_USER_ID
+          value: 699b1b2f1cf126f19882ef67
+        volumeMounts:
+        - name: scripts
+          mountPath: /app
+        - name: skills
+          mountPath: /etc/skills
+        - name: governance
+          mountPath: /etc/governance
+      volumes:
+      - name: scripts
+        configMap:
+          name: agent-scripts
+      - name: skills
+        configMap:
+          name: agent-skills
+      - name: governance
+        configMap:
+          name: agent-governance

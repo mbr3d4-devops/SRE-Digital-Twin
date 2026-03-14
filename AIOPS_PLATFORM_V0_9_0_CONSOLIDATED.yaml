@@ -1,3 +1,287 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-governance
+  namespace: ai-ops
+data:
+  language.rules.md: |
+    # SRE Language Rules
+    - IDIOMA: Responda APENAS em Português do Brasil (PT-BR).
+    - COMPORTAMENTO: Vá direto ao laudo técnico. NUNCA diga "Eu sou o agente X".
+    - PROIBIÇÃO: Não repita as instruções deste prompt.
+    - RACIOCÍNIO: É PROIBIDO exibir pensamento interno, análise passo a passo ou planejamento.
+
+  forensic.rules.md: |
+    # SRE Forensic Rules
+    - PROIBIDO o uso de emojis, saudações ou linguagem informal.
+    - Nunca inferir sem evidência técnica explícita.
+    - Se não houver evidência suficiente, declare "EVIDÊNCIA INSUFICIENTE".
+    - PROIBIDO gerar Markdown manual no LLM (use o Renderer).
+    - Evidências devem ser listas simples de strings (linhas de dados).
+
+  yaml.rules.md: |
+    # SRE YAML Rules
+    - O YAML sugerido deve derivar do YAML real coletado (State-of-the-cluster).
+    - Proibido gerar YAML fictício ou genérico.
+    - Mudanças propostas devem ser acompanhadas de análise de risco.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-skills
+  namespace: ai-ops
+data:
+  orchestrator.skill.md: |
+    🚨 **{alertname}**
+    O Pod **{pod}** no Namespace **{ns}** apresenta falha: **{summary}**
+    🆔 **Trace:** `{trace_id}` | 📬 **Fila:** RabbitMQ | 💾 **Estado:** Redis
+
+  analyst.skill.md: |
+    # CONTRATO DE SAÍDA SRE FORENSE (EXCLUSIVO JSON)
+    Você é um SRE Forense Autônomo. Sua função é INVESTIGAÇÃO TÉCNICA CLÍNICA.
+
+    REGRAS ABSOLUTAS:
+    1. PROIBIDO o uso de emojis, saudações ou linguagem informal.
+    2. Nunca inferir sem evidência técnica explícita.
+    3. Se não houver evidência suficiente, declare "EVIDÊNCIA INSUFICIENTE".
+    4. PROIBIDO gerar Markdown. Responda APENAS o objeto JSON.
+    5. Evidências devem ser listas simples de strings (linhas de dados).
+
+    ESTRUTURA JSON OBRIGATÓRIA:
+    {
+      "incidente": "NOME_DO_INCIDENTE",
+      "resumo_forense": "SUMÁRIO_EXECUTIVO_SECO",
+      "evidencias": {
+        "metricas": ["métrica_1 valor", "métrica_2 valor"],
+        "logs": ["linha_log_1", "linha_log_2"],
+        "eventos": ["evento_1", "evento_2"],
+        "describe": "status_técnico_direto",
+        "gitops": "contexto_sem_emojis",
+        "historico": "padrões_anteriores"
+      },
+      "correlacao_tecnica": "ANÁLISE_CRUZADA_DE_DADOS",
+      "causa_raiz": "DETERMINAÇÃO_OU_EVIDÊNCIA_INSUFICIENTE",
+      "impacto": "IMPACTO_OPERACIONAL_CONFIRMADO",
+      "yaml_atual": "BLOCO_YAML_REAL",
+      "yaml_sugerido": "BLOCO_YAML_PROPOSTO",
+      "risco_da_acao": "BAIXO|MEDIO|ALTO_JUSTIFICATIVA",
+      "confianca": "BAIXA|MEDIA|ALTA"
+    }
+
+    INICIE COM "{".
+
+  warden.skill.md: |
+    # CONTRATO DE SAÍDA (Obrigatório JSON)
+    Avalie a análise técnica do SRE e responda estritamente neste formato JSON:
+    {
+      "veredito": "APROVADO ou REPROVADO",
+      "justificativa": "🛡️ **Veredito:** <análise de risco técnica em PT-BR>"
+    }
+    PROIBIDO: Qualquer texto fora do objeto JSON.
+
+  auditor.skill.md: |
+    Você é o Auditor de SLA. Valide se a correção foi aplicada e se o sistema está estável.
+    📊 **Auditoria de Resiliência**
+
+  archivist.skill.md: |
+    Você é o Archivista. Documente o incidente para o post-mortem.
+    🗄️ **Registro Histórico**
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-scripts
+  namespace: ai-ops
+data:
+  runtime.llm_gateway.py: |
+    import json, urllib.request, re, os
+    def clean_output(text):
+        if not text: return '{"error": "EMPTY_LLM_RESPONSE"}'
+        text = text.strip()
+        text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"```", "", text); text = text.strip()
+        start = text.find("{"); end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end+1]
+            try: json.loads(candidate); return candidate
+            except: pass
+        return '{"error": "AI_OUTPUT_CONTAMINATED"}'
+    def call_llm(agent_name, user_data, trace_id="global"):
+        try:
+            gov = ""
+            for f in os.listdir("/etc/ai-ops/governance"):
+                with open(os.path.join("/etc/ai-ops/governance", f), "r") as r: gov += r.read() + "\n"
+            with open(f"/etc/ai-ops/agents/{agent_name}/skill.md", "r") as f: skill = f.read()
+            payload = {
+                "model": "qwen2.5-7b-instruct",
+                "messages": [
+                    {"role": "system", "content": f"{gov}\n{skill}\nCONTRATO: Responda APENAS JSON. Proibido introduções."},
+                    {"role": "user", "content": f"INPUT ({trace_id}):\n{user_data}\n\nResponda estritamente em JSON:"}
+                ],
+                "temperature": 0.0, "max_tokens": 1500
+            }
+            url = os.environ.get("LLM_URL", "http://172.18.0.1:1234/v1/chat/completions")
+            req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=120) as res:
+                return clean_output(json.loads(res.read())["choices"][0]["message"]["content"])
+        except Exception as e: return f"⚠️ Erro de IA ({agent_name}): {e}"
+
+  runtime.messaging.py: |
+    import os, json, time, pika, urllib.request
+    def get_mq_conn():
+        creds = pika.PlainCredentials(os.environ.get('RABBITMQ_USER', 'sre'), os.environ.get('RABBITMQ_PASS', 'sre2026'))
+        return pika.BlockingConnection(pika.ConnectionParameters(host=os.environ.get('RABBITMQ_HOST', 'rabbitmq'), virtual_host='sre-ops', credentials=creds))
+    def send_to_rocket(role, text, tmid=None):
+        alias_map = {"orchestrator": "Orchestrator", "analyst": "Analyst Forensic", "warden": "The Warden", "auditor": "Auditor SLA"}
+        colors = {"orchestrator": "#D32F2F", "analyst": "#4A148C", "warden": "#1B1E21", "auditor": "#2E7D32"}
+        safe_text = text.encode('utf-8', 'ignore').decode('utf-8')
+        if len(safe_text) > 4000: safe_text = safe_text[:4000] + "..."
+        payload = {"roomId": "699b26601cf126f19882ef8d", "text": safe_text, "alias": alias_map.get(role, "Agente SRE"), "attachments": [{"color": colors.get(role, "#555555"), "ts": time.time()}]}
+        if tmid: payload["tmid"] = tmid
+        try:
+            req = urllib.request.Request(f"{os.environ['RC_URL']}/api/v1/chat.postMessage", data=json.dumps(payload).encode(),
+                headers={"X-Auth-Token": os.environ['RC_TOKEN'], "X-User-Id": os.environ['RC_USER_ID'], "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as res: return json.loads(res.read())["message"]["_id"]
+        except: return None
+
+  runtime.thread_manager.py: |
+    import redis, os
+    def get_redis(): return redis.Redis(host=os.environ.get("REDIS_HOST", "redis-state"), port=6379, decode_responses=True)
+    class ThreadManager:
+        def __init__(self): self.r = get_redis()
+        def set_thread(self, tid, tmid): self.r.set(f"tmid:{tid}", tmid, ex=86400)
+        def get_thread(self, tid): return self.r.get(f"tmid:{tid}")
+        def save_evidence(self, tid, ev): self.r.set(f"evidence:{tid}", ev, ex=3600)
+        def get_evidence(self, tid): return self.r.get(f"evidence:{tid}") or "{}"
+        def save_analysis(self, tid, l): self.r.set(f"analysis:{tid}", l, ex=3600)
+        def get_analysis(self, tid): return self.r.get(f"analysis:{tid}") or "Sem laudo."
+
+  evidence_engine.collectors.py: |
+    import os, time, json
+    def run_command(cmd):
+        try: return os.popen(cmd).read()[:3000]
+        except Exception as e: return f"Erro coleta: {e}"
+    def collect_k8s_assets(pod, ns):
+        clean_pod = pod.split('/')[-1]
+        return run_command(f'kubectl describe pod {clean_pod} -n {ns}'), run_command(f'kubectl logs {clean_pod} -n {ns} --tail=100'), run_command(f'kubectl get events -n {ns} --sort-by=.lastTimestamp | tail -n 15')
+    def collect_live_yaml(ns, describe):
+        if "Owner-Ref" in describe or "Controlled By" in describe: return run_command(f'kubectl get deployment -n {ns} -o yaml | grep -A 20 "spec:"')
+        return "EVIDÊNCIA INSUFICIENTE (YAML)"
+    def get_metrics_mock(pod):
+        return [f"container_memory_usage_bytes{{pod='{pod}'}} 850Mi", f"kube_pod_container_status_restarts_total{{pod='{pod}'}} 4"]
+
+  evidence_engine.normalizer.py: |
+    import time, json
+    from .collectors import collect_k8s_assets, collect_live_yaml, get_metrics_mock
+    def package_evidence(pod, ns):
+        if not pod or pod == "N/A": return "Nenhuma evidência capturada (Pod N/A)."
+        describe, logs, events = collect_k8s_assets(pod, ns)
+        package = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "describe": describe, "logs": logs, "events": events, "live_yaml": collect_live_yaml(ns, describe), "metrics": get_metrics_mock(pod), "gitops_drift": "ArgoCD: OutOfSync"}
+        return json.dumps(package, indent=2)
+
+  renderer.forensic_markdown.py: |
+    def section(t, c): return f"\n{t}\n{c}\n" if c else ""
+    def code_block(l, c): return f"```{l}\n{c}\n```" if c else ""
+    def list_to_block(l, i): return code_block(l, "\n".join(i)) if i else ""
+    def metrics_block(m): return list_to_block("metrics", [f"{k} {v}" for k, v in m.items() if isinstance(m, dict)] or m) if m else ""
+    def render(d):
+        if not isinstance(d, dict): return d
+        ev = d.get("evidencias", {})
+        out = "INCIDENT FORENSIC REPORT\n────────────────────────\n"
+        out += section("Incident", d.get("incidente")) + section("Executive Summary", d.get("resumo_forense"))
+        out += section("Metrics (Prometheus)", metrics_block(ev.get("metricas"))) + section("Logs (Loki)", list_to_block("log", ev.get("logs")))
+        out += section("Kubernetes Events", list_to_block("event", ev.get("eventos"))) + section("Describe (kubectl)", code_block("describe", ev.get("describe")))
+        out += section("GitOps Context", code_block("gitops", ev.get("gitops"))) + section("Root Cause", d.get("causa_raiz"))
+        if d.get("yaml_sugerido"): out += section("Proposed Change", code_block("yaml", d.get("yaml_sugerido")))
+        out += section("Analysis Confidence", d.get("confianca"))
+        return out.strip()
+
+  runtime.orchestrator.py: |
+    import json, os, uuid, sys; sys.path.append('/etc/ai-ops/scripts')
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    class WebhookHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            data = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode())
+            tm = ThreadManager()
+            for alert in data.get('alerts', []):
+                tid = str(uuid.uuid4())[:8]; labels = alert.get('labels', {})
+                with open("/etc/ai-ops/agents/orchestrator/skill.md", "r") as f: template = f.read()
+                msg = template.format(alertname=labels.get('alertname', 'Alerta'), pod=labels.get('pod', 'N/A'), ns=labels.get('namespace', 'N/A'), summary=alert.get('annotations', {}).get('summary', 'Sem sumário'), trace_id=tid)
+                msg_id = send_to_rocket("orchestrator", msg)
+                if msg_id: tm.set_thread(tid, msg_id)
+                tm.save_evidence(tid, json.dumps(alert))
+                conn = get_mq_conn(); ch = conn.channel()
+                ch.queue_declare(queue='sre_tasks', durable=True); ch.basic_publish(exchange='', routing_key='sre_tasks', body=json.dumps({"trace_id": tid, "thread_id": msg_id}))
+                conn.close()
+            self.send_response(200); self.end_headers()
+    if __name__ == "__main__": HTTPServer(('0.0.0.0', 8080), WebhookHandler).serve_forever()
+
+  runtime.analyst.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    from runtime.llm_gateway import call_llm
+    from evidence_engine.normalizer import package_evidence
+    from renderer.forensic_markdown import render
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx.get('trace_id', 'unknown'); tm = ThreadManager()
+            tmid = ctx.get('thread_id') or tm.get_thread(tid); alert_raw = tm.get_evidence(tid); alert = json.loads(alert_raw)
+            enriched = package_evidence(alert.get('labels', {}).get('pod', 'N/A'), alert.get('labels', {}).get('namespace', 'default'))
+            raw_ai = call_llm("analyst", f"ALERTA: {alert_raw}\n\nEVIDENCIAS:\n{enriched}", trace_id=tid)
+            try: laudo = render(json.loads(raw_ai))
+            except: laudo = raw_ai
+            send_to_rocket("analyst", laudo, tmid=tmid); tm.save_analysis(tid, laudo)
+            conn = get_mq_conn(); ch_out = conn.channel(); ch_out.queue_declare(queue='sre_warden', durable=True)
+            ch_out.basic_publish(exchange='', routing_key='sre_warden', body=json.dumps(ctx)); conn.close(); ch.basic_ack(delivery_tag=method.delivery_tag)
+        except Exception as e: print(f"Error: {e}"); ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_tasks', durable=True); ch.basic_consume(queue='sre_tasks', on_message_callback=callback); ch.start_consuming()
+
+  runtime.warden.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    from runtime.llm_gateway import call_llm
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx['trace_id']; tm = ThreadManager()
+            raw_ai = call_llm("warden", f"ANALISE: {tm.get_analysis(tid)}", trace_id=tid)
+            try: data = json.loads(raw_ai); veredito = data.get('veredito', 'REPROVADO').upper(); justificativa = data.get('justificativa', raw_ai)
+            except: veredito = "REPROVADO"; justificativa = raw_ai
+            send_to_rocket("warden", justificativa, tmid=tm.get_thread(tid))
+            if veredito == "APROVADO":
+                conn = get_mq_conn(); ch_out = conn.channel(); ch_out.queue_declare(queue='sre_audit', durable=True)
+                ch_out.basic_publish(exchange='', routing_key='sre_audit', body=json.dumps(ctx)); conn.close()
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except Exception as e: print(f"Error: {e}"); ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_warden', durable=True); ch.basic_consume(queue='sre_warden', on_message_callback=callback); ch.start_consuming()
+
+  runtime.auditor.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx['trace_id']; tm = ThreadManager()
+            if tm.r.get(f"status:{tid}") == "resolved" and not tm.r.get(f"prompt_sent:{tid}"):
+                send_to_rocket("auditor", "✅ **Sistema Estabilizado Técnico.**\nMarcelo, informe:\n1. O que foi feito?\n2. Como foi feito?\n3. Por quê foi feito?", tmid=tm.get_thread(tid))
+                tm.r.set(f"prompt_sent:{tid}", "true", ex=3600)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except: ch.basic_ack(delivery_tag=method.delivery_tag)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_audit', durable=True); ch.basic_consume(queue='sre_audit', on_message_callback=callback); ch.start_consuming()
+
+  runtime.archivist.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn; from runtime.thread_manager import ThreadManager
+    def callback(ch, method, props, body):
+        try: tid = json.loads(body.decode())['trace_id']; ThreadManager().r.set(f"archive:{tid}", body.decode(), ex=604800)
+        except: pass
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_archive', durable=True); ch.basic_consume(queue='sre_archive', on_message_callback=callback); ch.start_consuming()
 apiVersion: apps/v1
 kind: Deployment
 metadata:

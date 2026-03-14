@@ -1,0 +1,1168 @@
+{
+    "apiVersion": "v1",
+    "items": [
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/agent-analyst",
+                    "deployment.kubernetes.io/revision": "155",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/agent-analyst\"},\"name\":\"agent-analyst\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"agent\":\"analyst\"}},\"template\":{\"metadata\":{\"labels\":{\"agent\":\"analyst\"}},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"pip install PyYAML redis pika \\u0026\\u0026 python /app/analyst_consumer.py\"],\"env\":[{\"name\":\"PYTHONUNBUFFERED\",\"value\":\"1\"},{\"name\":\"REDIS_HOST\",\"value\":\"redis-state\"},{\"name\":\"RABBITMQ_HOST\",\"value\":\"rabbitmq\"},{\"name\":\"RC_URL\",\"value\":\"http://rocketchat-rocketchat.communication.svc.cluster.local\"},{\"name\":\"RC_TOKEN\",\"value\":\"6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP\"},{\"name\":\"RC_USER_ID\",\"value\":\"699b1b2f1cf126f19882ef67\"}],\"image\":\"python:3.11-slim\",\"name\":\"main\",\"volumeMounts\":[{\"mountPath\":\"/app\",\"name\":\"scripts\"},{\"mountPath\":\"/etc/skills\",\"name\":\"skills\"},{\"mountPath\":\"/etc/governance\",\"name\":\"governance\"}]}],\"volumes\":[{\"configMap\":{\"name\":\"agent-scripts\"},\"name\":\"scripts\"},{\"configMap\":{\"name\":\"agent-skills\"},\"name\":\"skills\"},{\"configMap\":{\"name\":\"agent-governance\"},\"name\":\"governance\"}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-05T00:32:29Z",
+                "generation": 192,
+                "name": "agent-analyst",
+                "namespace": "ai-ops",
+                "resourceVersion": "591648",
+                "uid": "fd5991ef-d210-425f-a850-c53953bfa1a2"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "agent": "analyst"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-13T17:16:58-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "agent": "analyst"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "command": [
+                                    "/bin/sh",
+                                    "-c",
+                                    "pip install PyYAML redis pika \u0026\u0026 python /app/analyst_consumer.py"
+                                ],
+                                "env": [
+                                    {
+                                        "name": "PYTHONUNBUFFERED",
+                                        "value": "1"
+                                    },
+                                    {
+                                        "name": "REDIS_HOST",
+                                        "value": "redis-state"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_HOST",
+                                        "value": "rabbitmq"
+                                    },
+                                    {
+                                        "name": "RC_URL",
+                                        "value": "http://rocketchat-rocketchat.communication.svc.cluster.local"
+                                    },
+                                    {
+                                        "name": "RC_TOKEN",
+                                        "value": "6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP"
+                                    },
+                                    {
+                                        "name": "RC_USER_ID",
+                                        "value": "699b1b2f1cf126f19882ef67"
+                                    }
+                                ],
+                                "image": "python:3.11-slim",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "main",
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/app",
+                                        "name": "scripts"
+                                    },
+                                    {
+                                        "mountPath": "/etc/skills",
+                                        "name": "skills"
+                                    },
+                                    {
+                                        "mountPath": "/etc/governance",
+                                        "name": "governance"
+                                    }
+                                ]
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30,
+                        "volumes": [
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-scripts"
+                                },
+                                "name": "scripts"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-skills"
+                                },
+                                "name": "skills"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-governance"
+                                },
+                                "name": "governance"
+                            }
+                        ]
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-13T19:27:12Z",
+                        "lastUpdateTime": "2026-03-13T19:27:12Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-05T00:32:29Z",
+                        "lastUpdateTime": "2026-03-13T20:16:59Z",
+                        "message": "ReplicaSet \"agent-analyst-79d765dc8d\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 192,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/agent-archivist",
+                    "deployment.kubernetes.io/revision": "87",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/agent-archivist\"},\"name\":\"agent-archivist\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"agent\":\"archivist\"}},\"template\":{\"metadata\":{\"labels\":{\"agent\":\"archivist\"}},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"pip install PyYAML redis pika \\u0026\\u0026 python /app/archivist_consumer.py\"],\"env\":[{\"name\":\"PYTHONUNBUFFERED\",\"value\":\"1\"},{\"name\":\"REDIS_HOST\",\"value\":\"redis-state\"},{\"name\":\"RABBITMQ_HOST\",\"value\":\"rabbitmq\"},{\"name\":\"RC_URL\",\"value\":\"http://rocketchat-rocketchat.communication.svc.cluster.local\"},{\"name\":\"RC_TOKEN\",\"value\":\"6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP\"},{\"name\":\"RC_USER_ID\",\"value\":\"699b1b2f1cf126f19882ef67\"}],\"image\":\"python:3.11-slim\",\"name\":\"main\",\"volumeMounts\":[{\"mountPath\":\"/app\",\"name\":\"scripts\"},{\"mountPath\":\"/etc/skills\",\"name\":\"skills\"},{\"mountPath\":\"/etc/governance\",\"name\":\"governance\"}]}],\"volumes\":[{\"configMap\":{\"name\":\"agent-scripts\"},\"name\":\"scripts\"},{\"configMap\":{\"name\":\"agent-skills\"},\"name\":\"skills\"},{\"configMap\":{\"name\":\"agent-governance\"},\"name\":\"governance\"}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-05T00:32:29Z",
+                "generation": 137,
+                "name": "agent-archivist",
+                "namespace": "ai-ops",
+                "resourceVersion": "586882",
+                "uid": "93915b14-6b76-4f24-a517-f0e51d745086"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "agent": "archivist"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-13T16:35:00-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "agent": "archivist"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "command": [
+                                    "/bin/sh",
+                                    "-c",
+                                    "pip install PyYAML redis pika \u0026\u0026 python /app/archivist_consumer.py"
+                                ],
+                                "env": [
+                                    {
+                                        "name": "PYTHONUNBUFFERED",
+                                        "value": "1"
+                                    },
+                                    {
+                                        "name": "REDIS_HOST",
+                                        "value": "redis-state"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_HOST",
+                                        "value": "rabbitmq"
+                                    },
+                                    {
+                                        "name": "RC_URL",
+                                        "value": "http://rocketchat-rocketchat.communication.svc.cluster.local"
+                                    },
+                                    {
+                                        "name": "RC_TOKEN",
+                                        "value": "6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP"
+                                    },
+                                    {
+                                        "name": "RC_USER_ID",
+                                        "value": "699b1b2f1cf126f19882ef67"
+                                    }
+                                ],
+                                "image": "python:3.11-slim",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "main",
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/app",
+                                        "name": "scripts"
+                                    },
+                                    {
+                                        "mountPath": "/etc/skills",
+                                        "name": "skills"
+                                    },
+                                    {
+                                        "mountPath": "/etc/governance",
+                                        "name": "governance"
+                                    }
+                                ]
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30,
+                        "volumes": [
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-scripts"
+                                },
+                                "name": "scripts"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-skills"
+                                },
+                                "name": "skills"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-governance"
+                                },
+                                "name": "governance"
+                            }
+                        ]
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-13T19:11:51Z",
+                        "lastUpdateTime": "2026-03-13T19:11:51Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-05T00:32:29Z",
+                        "lastUpdateTime": "2026-03-13T19:35:01Z",
+                        "message": "ReplicaSet \"agent-archivist-548b5c9bfc\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 137,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/agent-auditor",
+                    "deployment.kubernetes.io/revision": "98",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/agent-auditor\"},\"name\":\"agent-auditor\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"agent\":\"auditor\"}},\"template\":{\"metadata\":{\"labels\":{\"agent\":\"auditor\"}},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"pip install PyYAML redis pika \\u0026\\u0026 python /app/auditor_consumer.py\"],\"env\":[{\"name\":\"PYTHONUNBUFFERED\",\"value\":\"1\"},{\"name\":\"REDIS_HOST\",\"value\":\"redis-state\"},{\"name\":\"RABBITMQ_HOST\",\"value\":\"rabbitmq\"},{\"name\":\"RC_URL\",\"value\":\"http://rocketchat-rocketchat.communication.svc.cluster.local\"},{\"name\":\"RC_TOKEN\",\"value\":\"6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP\"},{\"name\":\"RC_USER_ID\",\"value\":\"699b1b2f1cf126f19882ef67\"}],\"image\":\"python:3.11-slim\",\"name\":\"main\",\"volumeMounts\":[{\"mountPath\":\"/app\",\"name\":\"scripts\"},{\"mountPath\":\"/etc/skills\",\"name\":\"skills\"},{\"mountPath\":\"/etc/governance\",\"name\":\"governance\"}]}],\"volumes\":[{\"configMap\":{\"name\":\"agent-scripts\"},\"name\":\"scripts\"},{\"configMap\":{\"name\":\"agent-skills\"},\"name\":\"skills\"},{\"configMap\":{\"name\":\"agent-governance\"},\"name\":\"governance\"}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-05T00:32:28Z",
+                "generation": 148,
+                "name": "agent-auditor",
+                "namespace": "ai-ops",
+                "resourceVersion": "589441",
+                "uid": "90a728ba-1f65-4fa1-a465-cfbd53215751"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "agent": "auditor"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-13T16:56:10-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "agent": "auditor"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "command": [
+                                    "/bin/sh",
+                                    "-c",
+                                    "pip install PyYAML redis pika \u0026\u0026 python /app/auditor_consumer.py"
+                                ],
+                                "env": [
+                                    {
+                                        "name": "PYTHONUNBUFFERED",
+                                        "value": "1"
+                                    },
+                                    {
+                                        "name": "REDIS_HOST",
+                                        "value": "redis-state"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_HOST",
+                                        "value": "rabbitmq"
+                                    },
+                                    {
+                                        "name": "RC_URL",
+                                        "value": "http://rocketchat-rocketchat.communication.svc.cluster.local"
+                                    },
+                                    {
+                                        "name": "RC_TOKEN",
+                                        "value": "6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP"
+                                    },
+                                    {
+                                        "name": "RC_USER_ID",
+                                        "value": "699b1b2f1cf126f19882ef67"
+                                    }
+                                ],
+                                "image": "python:3.11-slim",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "main",
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/app",
+                                        "name": "scripts"
+                                    },
+                                    {
+                                        "mountPath": "/etc/skills",
+                                        "name": "skills"
+                                    },
+                                    {
+                                        "mountPath": "/etc/governance",
+                                        "name": "governance"
+                                    }
+                                ]
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30,
+                        "volumes": [
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-scripts"
+                                },
+                                "name": "scripts"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-skills"
+                                },
+                                "name": "skills"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-governance"
+                                },
+                                "name": "governance"
+                            }
+                        ]
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-13T19:11:51Z",
+                        "lastUpdateTime": "2026-03-13T19:11:51Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-05T00:32:29Z",
+                        "lastUpdateTime": "2026-03-13T19:56:11Z",
+                        "message": "ReplicaSet \"agent-auditor-5d7cdc8cf5\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 148,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/agent-orchestrator",
+                    "deployment.kubernetes.io/revision": "166",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/agent-orchestrator\"},\"name\":\"agent-orchestrator\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"agent\":\"orchestrator\"}},\"template\":{\"metadata\":{\"labels\":{\"agent\":\"orchestrator\"}},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"pip install PyYAML redis pika prometheus-client \\u0026\\u0026 python /app/orchestrator.py\"],\"env\":[{\"name\":\"PYTHONUNBUFFERED\",\"value\":\"1\"},{\"name\":\"REDIS_HOST\",\"value\":\"redis-state\"},{\"name\":\"RABBITMQ_HOST\",\"value\":\"rabbitmq\"},{\"name\":\"RC_URL\",\"value\":\"http://rocketchat-rocketchat.communication.svc.cluster.local\"},{\"name\":\"RC_TOKEN\",\"value\":\"6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP\"},{\"name\":\"RC_USER_ID\",\"value\":\"699b1b2f1cf126f19882ef67\"}],\"image\":\"python:3.11-slim\",\"name\":\"main\",\"ports\":[{\"containerPort\":8080,\"name\":\"http\"},{\"containerPort\":8000,\"name\":\"metrics\"}],\"readinessProbe\":{\"httpGet\":{\"path\":\"/health\",\"port\":8080},\"initialDelaySeconds\":20,\"periodSeconds\":5},\"volumeMounts\":[{\"mountPath\":\"/app\",\"name\":\"scripts\"},{\"mountPath\":\"/etc/governance\",\"name\":\"governance\"},{\"mountPath\":\"/etc/skills\",\"name\":\"skills\"}]}],\"volumes\":[{\"configMap\":{\"name\":\"agent-scripts\"},\"name\":\"scripts\"},{\"configMap\":{\"name\":\"agent-governance\"},\"name\":\"governance\"},{\"configMap\":{\"name\":\"agent-skills\"},\"name\":\"skills\"}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-05T00:32:28Z",
+                "generation": 193,
+                "name": "agent-orchestrator",
+                "namespace": "ai-ops",
+                "resourceVersion": "589488",
+                "uid": "af2a8b17-6df4-4dbd-8fe8-4c0d5e43f0f8"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "agent": "orchestrator"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-13T16:56:10-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "agent": "orchestrator"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "command": [
+                                    "/bin/sh",
+                                    "-c",
+                                    "pip install PyYAML redis pika prometheus-client \u0026\u0026 python /app/orchestrator.py"
+                                ],
+                                "env": [
+                                    {
+                                        "name": "PYTHONUNBUFFERED",
+                                        "value": "1"
+                                    },
+                                    {
+                                        "name": "REDIS_HOST",
+                                        "value": "redis-state"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_HOST",
+                                        "value": "rabbitmq"
+                                    },
+                                    {
+                                        "name": "RC_URL",
+                                        "value": "http://rocketchat-rocketchat.communication.svc.cluster.local"
+                                    },
+                                    {
+                                        "name": "RC_TOKEN",
+                                        "value": "6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP"
+                                    },
+                                    {
+                                        "name": "RC_USER_ID",
+                                        "value": "699b1b2f1cf126f19882ef67"
+                                    }
+                                ],
+                                "image": "python:3.11-slim",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "main",
+                                "ports": [
+                                    {
+                                        "containerPort": 8080,
+                                        "name": "http",
+                                        "protocol": "TCP"
+                                    },
+                                    {
+                                        "containerPort": 8000,
+                                        "name": "metrics",
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "readinessProbe": {
+                                    "failureThreshold": 3,
+                                    "httpGet": {
+                                        "path": "/health",
+                                        "port": 8080,
+                                        "scheme": "HTTP"
+                                    },
+                                    "initialDelaySeconds": 20,
+                                    "periodSeconds": 5,
+                                    "successThreshold": 1,
+                                    "timeoutSeconds": 1
+                                },
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/app",
+                                        "name": "scripts"
+                                    },
+                                    {
+                                        "mountPath": "/etc/governance",
+                                        "name": "governance"
+                                    },
+                                    {
+                                        "mountPath": "/etc/skills",
+                                        "name": "skills"
+                                    }
+                                ]
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30,
+                        "volumes": [
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-scripts"
+                                },
+                                "name": "scripts"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-governance"
+                                },
+                                "name": "governance"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-skills"
+                                },
+                                "name": "skills"
+                            }
+                        ]
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-13T19:12:10Z",
+                        "lastUpdateTime": "2026-03-13T19:12:10Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-13T18:41:41Z",
+                        "lastUpdateTime": "2026-03-13T19:56:31Z",
+                        "message": "ReplicaSet \"agent-orchestrator-7c669766c6\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 193,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/agent-warden",
+                    "deployment.kubernetes.io/revision": "119",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/agent-warden\"},\"name\":\"agent-warden\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"agent\":\"warden\"}},\"template\":{\"metadata\":{\"labels\":{\"agent\":\"warden\"}},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"pip install PyYAML redis pika \\u0026\\u0026 python /app/warden_consumer.py\"],\"env\":[{\"name\":\"PYTHONUNBUFFERED\",\"value\":\"1\"},{\"name\":\"REDIS_HOST\",\"value\":\"redis-state\"},{\"name\":\"RABBITMQ_HOST\",\"value\":\"rabbitmq\"},{\"name\":\"RC_URL\",\"value\":\"http://rocketchat-rocketchat.communication.svc.cluster.local\"},{\"name\":\"RC_TOKEN\",\"value\":\"6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP\"},{\"name\":\"RC_USER_ID\",\"value\":\"699b1b2f1cf126f19882ef67\"}],\"image\":\"python:3.11-slim\",\"name\":\"main\",\"volumeMounts\":[{\"mountPath\":\"/app\",\"name\":\"scripts\"},{\"mountPath\":\"/etc/skills\",\"name\":\"skills\"},{\"mountPath\":\"/etc/governance\",\"name\":\"governance\"}]}],\"volumes\":[{\"configMap\":{\"name\":\"agent-scripts\"},\"name\":\"scripts\"},{\"configMap\":{\"name\":\"agent-skills\"},\"name\":\"skills\"},{\"configMap\":{\"name\":\"agent-governance\"},\"name\":\"governance\"}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-05T00:32:29Z",
+                "generation": 169,
+                "name": "agent-warden",
+                "namespace": "ai-ops",
+                "resourceVersion": "591656",
+                "uid": "8f5c1eda-f443-49c4-8e88-551c15c1e5d9"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "agent": "warden"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-13T17:16:58-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "agent": "warden"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "command": [
+                                    "/bin/sh",
+                                    "-c",
+                                    "pip install PyYAML redis pika \u0026\u0026 python /app/warden_consumer.py"
+                                ],
+                                "env": [
+                                    {
+                                        "name": "PYTHONUNBUFFERED",
+                                        "value": "1"
+                                    },
+                                    {
+                                        "name": "REDIS_HOST",
+                                        "value": "redis-state"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_HOST",
+                                        "value": "rabbitmq"
+                                    },
+                                    {
+                                        "name": "RC_URL",
+                                        "value": "http://rocketchat-rocketchat.communication.svc.cluster.local"
+                                    },
+                                    {
+                                        "name": "RC_TOKEN",
+                                        "value": "6HZCBMmq1T9PXDITSDfnFaLDpSkQC4kn2RpK6zZKIuP"
+                                    },
+                                    {
+                                        "name": "RC_USER_ID",
+                                        "value": "699b1b2f1cf126f19882ef67"
+                                    }
+                                ],
+                                "image": "python:3.11-slim",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "main",
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File",
+                                "volumeMounts": [
+                                    {
+                                        "mountPath": "/app",
+                                        "name": "scripts"
+                                    },
+                                    {
+                                        "mountPath": "/etc/skills",
+                                        "name": "skills"
+                                    },
+                                    {
+                                        "mountPath": "/etc/governance",
+                                        "name": "governance"
+                                    }
+                                ]
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30,
+                        "volumes": [
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-scripts"
+                                },
+                                "name": "scripts"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-skills"
+                                },
+                                "name": "skills"
+                            },
+                            {
+                                "configMap": {
+                                    "defaultMode": 420,
+                                    "name": "agent-governance"
+                                },
+                                "name": "governance"
+                            }
+                        ]
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-13T19:11:51Z",
+                        "lastUpdateTime": "2026-03-13T19:11:51Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-05T00:32:29Z",
+                        "lastUpdateTime": "2026-03-13T20:16:59Z",
+                        "message": "ReplicaSet \"agent-warden-8cc55f4cb\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 169,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/rabbitmq",
+                    "deployment.kubernetes.io/revision": "4",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/rabbitmq\"},\"labels\":{\"app\":\"rabbitmq\"},\"name\":\"rabbitmq\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"rabbitmq\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"rabbitmq\"}},\"spec\":{\"containers\":[{\"env\":[{\"name\":\"RABBITMQ_DEFAULT_USER\",\"value\":\"sre\"},{\"name\":\"RABBITMQ_DEFAULT_PASS\",\"value\":\"sre2026\"},{\"name\":\"RABBITMQ_DEFAULT_VHOST\",\"value\":\"sre-ops\"}],\"image\":\"rabbitmq:3-management-alpine\",\"name\":\"rabbitmq\",\"ports\":[{\"containerPort\":5672},{\"containerPort\":15672},{\"containerPort\":15692}],\"readinessProbe\":{\"initialDelaySeconds\":15,\"periodSeconds\":10,\"tcpSocket\":{\"port\":5672}},\"resources\":{\"limits\":{\"cpu\":\"500m\",\"memory\":\"1Gi\"},\"requests\":{\"cpu\":\"200m\",\"memory\":\"512Mi\"}}}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-04T18:37:23Z",
+                "generation": 5,
+                "labels": {
+                    "app": "rabbitmq"
+                },
+                "name": "rabbitmq",
+                "namespace": "ai-ops",
+                "resourceVersion": "538196",
+                "uid": "ac3d75ff-c039-4382-9366-7a81c3789c32"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "app": "rabbitmq"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-04T15:48:28-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "app": "rabbitmq"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "env": [
+                                    {
+                                        "name": "RABBITMQ_DEFAULT_USER",
+                                        "value": "sre"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_DEFAULT_PASS",
+                                        "value": "sre2026"
+                                    },
+                                    {
+                                        "name": "RABBITMQ_DEFAULT_VHOST",
+                                        "value": "sre-ops"
+                                    }
+                                ],
+                                "image": "rabbitmq:3-management-alpine",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "rabbitmq",
+                                "ports": [
+                                    {
+                                        "containerPort": 5672,
+                                        "protocol": "TCP"
+                                    },
+                                    {
+                                        "containerPort": 15672,
+                                        "protocol": "TCP"
+                                    },
+                                    {
+                                        "containerPort": 15692,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "readinessProbe": {
+                                    "failureThreshold": 3,
+                                    "initialDelaySeconds": 15,
+                                    "periodSeconds": 10,
+                                    "successThreshold": 1,
+                                    "tcpSocket": {
+                                        "port": 5672
+                                    },
+                                    "timeoutSeconds": 1
+                                },
+                                "resources": {
+                                    "limits": {
+                                        "cpu": "500m",
+                                        "memory": "1Gi"
+                                    },
+                                    "requests": {
+                                        "cpu": "200m",
+                                        "memory": "512Mi"
+                                    }
+                                },
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File"
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-13T12:46:36Z",
+                        "lastUpdateTime": "2026-03-13T12:46:36Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-04T18:37:23Z",
+                        "lastUpdateTime": "2026-03-13T12:47:45Z",
+                        "message": "ReplicaSet \"rabbitmq-85dbc4c4b4\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 5,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "deployment.kubernetes.io/revision": "1",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{},\"name\":\"redis-commander\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"redis-commander\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"redis-commander\"}},\"spec\":{\"containers\":[{\"env\":[{\"name\":\"REDIS_HOSTS\",\"value\":\"local:redis-state:6379\"}],\"image\":\"rediscommander/redis-commander:latest\",\"name\":\"redis-commander\",\"ports\":[{\"containerPort\":8081}]}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-12T12:31:58Z",
+                "generation": 1,
+                "name": "redis-commander",
+                "namespace": "ai-ops",
+                "resourceVersion": "445849",
+                "uid": "7475b8ae-cadf-4a40-ae81-aa886c00f911"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "app": "redis-commander"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "creationTimestamp": null,
+                        "labels": {
+                            "app": "redis-commander"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "env": [
+                                    {
+                                        "name": "REDIS_HOSTS",
+                                        "value": "local:redis-state:6379"
+                                    }
+                                ],
+                                "image": "rediscommander/redis-commander:latest",
+                                "imagePullPolicy": "Always",
+                                "name": "redis-commander",
+                                "ports": [
+                                    {
+                                        "containerPort": 8081,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "resources": {},
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File"
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-12T12:32:03Z",
+                        "lastUpdateTime": "2026-03-12T12:32:03Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-12T12:31:58Z",
+                        "lastUpdateTime": "2026-03-12T12:32:03Z",
+                        "message": "ReplicaSet \"redis-commander-9d959748d\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 1,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        },
+        {
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "annotations": {
+                    "argocd.argoproj.io/tracking-id": "ai-driven-apps:apps/Deployment:ai-ops/redis-state",
+                    "deployment.kubernetes.io/revision": "3",
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"apps/v1\",\"kind\":\"Deployment\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:apps/Deployment:ai-ops/redis-state\"},\"labels\":{\"app\":\"redis-state\"},\"name\":\"redis-state\",\"namespace\":\"ai-ops\"},\"spec\":{\"replicas\":1,\"selector\":{\"matchLabels\":{\"app\":\"redis-state\"}},\"template\":{\"metadata\":{\"labels\":{\"app\":\"redis-state\"}},\"spec\":{\"containers\":[{\"image\":\"redis:alpine\",\"name\":\"redis\",\"ports\":[{\"containerPort\":6379}],\"resources\":{\"limits\":{\"cpu\":\"100m\",\"memory\":\"64Mi\"},\"requests\":{\"cpu\":\"50m\",\"memory\":\"32Mi\"}}},{\"image\":\"oliver006/redis_exporter:latest\",\"name\":\"redis-exporter\",\"ports\":[{\"containerPort\":9121}],\"resources\":{\"limits\":{\"cpu\":\"100m\",\"memory\":\"64Mi\"},\"requests\":{\"cpu\":\"50m\",\"memory\":\"32Mi\"}}}]}}}}\n"
+                },
+                "creationTimestamp": "2026-03-04T18:08:20Z",
+                "generation": 4,
+                "labels": {
+                    "app": "redis-state"
+                },
+                "name": "redis-state",
+                "namespace": "ai-ops",
+                "resourceVersion": "338922",
+                "uid": "6349c927-00ce-434a-9253-c22642093d29"
+            },
+            "spec": {
+                "progressDeadlineSeconds": 600,
+                "replicas": 1,
+                "revisionHistoryLimit": 10,
+                "selector": {
+                    "matchLabels": {
+                        "app": "redis-state"
+                    }
+                },
+                "strategy": {
+                    "rollingUpdate": {
+                        "maxSurge": "25%",
+                        "maxUnavailable": "25%"
+                    },
+                    "type": "RollingUpdate"
+                },
+                "template": {
+                    "metadata": {
+                        "annotations": {
+                            "kubectl.kubernetes.io/restartedAt": "2026-03-04T15:48:28-03:00"
+                        },
+                        "creationTimestamp": null,
+                        "labels": {
+                            "app": "redis-state"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "image": "redis:alpine",
+                                "imagePullPolicy": "IfNotPresent",
+                                "name": "redis",
+                                "ports": [
+                                    {
+                                        "containerPort": 6379,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "resources": {
+                                    "limits": {
+                                        "cpu": "100m",
+                                        "memory": "64Mi"
+                                    },
+                                    "requests": {
+                                        "cpu": "50m",
+                                        "memory": "32Mi"
+                                    }
+                                },
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File"
+                            },
+                            {
+                                "image": "oliver006/redis_exporter:latest",
+                                "imagePullPolicy": "Always",
+                                "name": "redis-exporter",
+                                "ports": [
+                                    {
+                                        "containerPort": 9121,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "resources": {
+                                    "limits": {
+                                        "cpu": "100m",
+                                        "memory": "64Mi"
+                                    },
+                                    "requests": {
+                                        "cpu": "50m",
+                                        "memory": "32Mi"
+                                    }
+                                },
+                                "terminationMessagePath": "/dev/termination-log",
+                                "terminationMessagePolicy": "File"
+                            }
+                        ],
+                        "dnsPolicy": "ClusterFirst",
+                        "restartPolicy": "Always",
+                        "schedulerName": "default-scheduler",
+                        "securityContext": {},
+                        "terminationGracePeriodSeconds": 30
+                    }
+                }
+            },
+            "status": {
+                "availableReplicas": 1,
+                "conditions": [
+                    {
+                        "lastTransitionTime": "2026-03-04T18:08:26Z",
+                        "lastUpdateTime": "2026-03-04T18:08:26Z",
+                        "message": "Deployment has minimum availability.",
+                        "reason": "MinimumReplicasAvailable",
+                        "status": "True",
+                        "type": "Available"
+                    },
+                    {
+                        "lastTransitionTime": "2026-03-04T18:08:20Z",
+                        "lastUpdateTime": "2026-03-04T18:48:30Z",
+                        "message": "ReplicaSet \"redis-state-7b6f457649\" has successfully progressed.",
+                        "reason": "NewReplicaSetAvailable",
+                        "status": "True",
+                        "type": "Progressing"
+                    }
+                ],
+                "observedGeneration": 4,
+                "readyReplicas": 1,
+                "replicas": 1,
+                "updatedReplicas": 1
+            }
+        }
+    ],
+    "kind": "List",
+    "metadata": {
+        "resourceVersion": ""
+    }
+}

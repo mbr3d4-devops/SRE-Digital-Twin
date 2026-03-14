@@ -4,545 +4,194 @@ metadata:
   name: agent-scripts
   namespace: ai-ops
 data:
-  preflight.py: |
-    import os, sys, socket
-    import urllib.request
-    def check():
-        # Valida LM Studio no Gateway do Kind
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        if s.connect_ex(('172.18.0.1', 1234)) != 0:
-            print("❌ Erro: LM Studio inacessível em 172.18.0.1:1234"); sys.exit(1)
-        # Valida API do Gitea
-        url = os.environ['GITEA_URL']
+  runtime.llm_gateway.py: |
+    import json, urllib.request, re, os
+    def clean_output(text):
+        if not text: return '{"error": "EMPTY_LLM_RESPONSE"}'
+        text = text.strip()
+        text = re.sub(r"```json", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"```", "", text); text = text.strip()
+        start = text.find("{"); end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end+1]
+            try: json.loads(candidate); return candidate
+            except: pass
+        return '{"error": "AI_OUTPUT_CONTAMINATED"}'
+    def call_llm(agent_name, user_data, trace_id="global"):
         try:
-            req = urllib.request.urlopen(url, timeout=5)
-            if req.getcode() != 200:
-                print(f"❌ Erro: {url} retornou {req.getcode()}"); sys.exit(1)
-        except Exception as e:
-            print(f"❌ Erro de conexão com {url}: {e}"); sys.exit(1)
-        print("✅ Preflight Passou! Iniciando Agentes."); sys.exit(0)
-    if __name__ == "__main__": check()
-  orchestrator_v7.py: |
-    """
-    Digital Twin Orchestrator v7 - Advanced AI SRE
-    ==============================================
-    - Staff Doctrine: Disk-based GitOps & VSCode Integration
-    """
-    import http.server, socketserver, json, urllib.request, urllib.parse, time, hashlib, base64, psycopg2, ssl, datetime, logging, uuid, sys, threading, re, os, yaml, copy
-    from concurrent.futures import ThreadPoolExecutor
-    import redis as redis_lib
-    try:
-        import pika
-    except ImportError:
-        pika = None
-    try:
-        from prometheus_client import start_http_server, Counter, Histogram
-    except ImportError:
-        start_http_server = Counter = Histogram = None
-    
-    class AntigravityJSONFormatter(logging.Formatter):
-        def format(self, record):
-            log_record = {"timestamp": self.formatTime(record), "level": record.levelname, "agent_role": getattr(record, 'role', 'unidentified'), "operation": getattr(record, 'operation', 'idle'), "trace_id": getattr(record, 'trace_id', 'no-trace'), "message": record.getMessage()}
-            if hasattr(record, 'metadata'): log_record["metadata"] = record.metadata
-            return json.dumps(log_record)
-    
-    logger = logging.getLogger("Antigravity"); logger.setLevel(logging.INFO)
-    handler = logging.StreamHandler(sys.stdout); handler.setFormatter(AntigravityJSONFormatter()); logger.addHandler(handler)
-    executor = ThreadPoolExecutor(max_workers=10)
-    
-    WEBHOOK_CONFIG_PATH = "/etc/config/rocketchat_hooks.json"
-    RC_TOKEN = ""; RC_USER_ID = ""; RC_URL = "http://rocketchat-rocketchat.communication.svc.cluster.local:80"
-    
-    def load_credentials():
-        global RC_TOKEN, RC_USER_ID
+            gov = ""
+            for f in os.listdir("/etc/ai-ops/governance"):
+                with open(os.path.join("/etc/ai-ops/governance", f), "r") as r: gov += r.read() + "\n"
+            with open(f"/etc/ai-ops/agents/{agent_name}/skill.md", "r") as f: skill = f.read()
+            payload = {
+                "model": "qwen2.5-7b-instruct",
+                "messages": [
+                    {"role": "system", "content": f"{gov}\n{skill}\nCONTRATO: Responda APENAS JSON. Proibido introduções."},
+                    {"role": "user", "content": f"INPUT ({trace_id}):\n{user_data}\n\nResponda estritamente em JSON:"}
+                ],
+                "temperature": 0.0, "max_tokens": 1500
+            }
+            url = os.environ.get("LLM_URL", "http://172.18.0.1:1234/v1/chat/completions")
+            req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=120) as res:
+                return clean_output(json.loads(res.read())["choices"][0]["message"]["content"])
+        except Exception as e: return f"⚠️ Erro de IA ({agent_name}): {e}"
+
+  runtime.messaging.py: |
+    import os, json, time, pika, urllib.request
+    def get_mq_conn():
+        creds = pika.PlainCredentials(os.environ.get('RABBITMQ_USER', 'sre'), os.environ.get('RABBITMQ_PASS', 'sre2026'))
+        return pika.BlockingConnection(pika.ConnectionParameters(host=os.environ.get('RABBITMQ_HOST', 'rabbitmq'), virtual_host='sre-ops', credentials=creds))
+    def send_to_rocket(role, text, tmid=None):
+        alias_map = {"orchestrator": "Orchestrator", "analyst": "Analyst Forensic", "warden": "The Warden", "auditor": "Auditor SLA"}
+        colors = {"orchestrator": "#D32F2F", "analyst": "#4A148C", "warden": "#1B1E21", "auditor": "#2E7D32"}
+        safe_text = text.encode('utf-8', 'ignore').decode('utf-8')
+        if len(safe_text) > 4000: safe_text = safe_text[:4000] + "..."
+        payload = {"roomId": "699b26601cf126f19882ef8d", "text": safe_text, "alias": alias_map.get(role, "Agente SRE"), "attachments": [{"color": colors.get(role, "#555555"), "ts": time.time()}]}
+        if tmid: payload["tmid"] = tmid
         try:
-            if os.path.exists(WEBHOOK_CONFIG_PATH):
-                with open(WEBHOOK_CONFIG_PATH, "r") as f:
-                    creds = json.load(f); RC_TOKEN = creds.get("RC_TOKEN", ""); RC_USER_ID = creds.get("RC_USER_ID", "")
-        except: pass
-    load_credentials()
-    
-    LM_STUDIO = "http://172.18.0.1:1234/v1/chat/completions"; LM_MODEL = "meta-llama-3.1-8b-instruct"
-    ORCH_URL = "http://orchestrator.127.0.0.1.nip.io"
-    GITEA_API = "http://gitea-http.gitops.svc.cluster.local:3000/api/v1/repos/marcelo/target-app-infra/contents/"
-    GITEA_CREDS = base64.b64encode(b"marcelo:password123").decode()
-    LOKI_URL = "http://loki-proxy.observability.svc.cluster.local:3100/loki/api/v1/query_range"
-    PROM_URL = "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090/api/v1/query"
-    K8S_URL = "https://kubernetes.default.svc"
-    try:
-        with open('/var/run/secrets/kubernetes.io/serviceaccount/token', 'r') as f: K8S_TOKEN = f.read().strip()
-        CTX = ssl.create_default_context(cafile='/var/run/secrets/kubernetes.io/serviceaccount/ca.crt')
-    except: K8S_TOKEN, CTX = "", ssl._create_unverified_context()
-    
-    COLORS = {"ops-critical": "#FF0000", "ops-remediation": "#FFA500", "ops-security": "#7000FF", "ops-history": "#4A4A4A", "analyst": "#9C27B0", "devops": "#2196F3"}
-    
-    # v2.0: Redis-backed state persistence
-    REDIS_HOST = os.environ.get("REDIS_HOST", "redis-state")
-    try:
-        rdb = redis_lib.Redis(host=REDIS_HOST, port=6379, db=0, decode_responses=True)
-        rdb.ping()
-        print(f"DEBUG: Redis connected at {REDIS_HOST}", flush=True)
-    except Exception as e:
-        print(f"WARN: Redis unavailable ({e}), falling back to in-memory", flush=True)
-        rdb = None
+            req = urllib.request.Request(f"{os.environ['RC_URL']}/api/v1/chat.postMessage", data=json.dumps(payload).encode(),
+                headers={"X-Auth-Token": os.environ['RC_TOKEN'], "X-User-Id": os.environ['RC_USER_ID'], "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as res: return json.loads(res.read())["message"]["_id"]
+        except: return None
 
-    def state_get(collection, key):
-        if rdb:
-            val = rdb.hget(collection, key)
-            return json.loads(val) if val else None
-        return _mem.get(collection, {}).get(key)
+  runtime.thread_manager.py: |
+    import redis, os
+    def get_redis(): return redis.Redis(host=os.environ.get("REDIS_HOST", "redis-state"), port=6379, decode_responses=True)
+    class ThreadManager:
+        def __init__(self): self.r = get_redis()
+        def set_thread(self, tid, tmid): self.r.set(f"tmid:{tid}", tmid, ex=86400)
+        def get_thread(self, tid): return self.r.get(f"tmid:{tid}")
+        def save_evidence(self, tid, ev): self.r.set(f"evidence:{tid}", ev, ex=3600)
+        def get_evidence(self, tid): return self.r.get(f"evidence:{tid}") or "{}"
+        def save_analysis(self, tid, l): self.r.set(f"analysis:{tid}", l, ex=3600)
+        def get_analysis(self, tid): return self.r.get(f"analysis:{tid}") or "Sem laudo."
 
-    def state_set(collection, key, value):
-        if rdb:
-            rdb.hset(collection, key, json.dumps(value))
-        else:
-            _mem.setdefault(collection, {})[key] = value
+  evidence_engine.collectors.py: |
+    import os, time, json
+    def run_command(cmd):
+        try: return os.popen(cmd).read()[:3000]
+        except Exception as e: return f"Erro coleta: {e}"
+    def collect_k8s_assets(pod, ns):
+        clean_pod = pod.split('/')[-1]
+        return run_command(f'kubectl describe pod {clean_pod} -n {ns}'), run_command(f'kubectl logs {clean_pod} -n {ns} --tail=100'), run_command(f'kubectl get events -n {ns} --sort-by=.lastTimestamp | tail -n 15')
+    def collect_live_yaml(ns, describe):
+        if "Owner-Ref" in describe or "Controlled By" in describe: return run_command(f'kubectl get deployment -n {ns} -o yaml | grep -A 20 "spec:"')
+        return "EVIDÊNCIA INSUFICIENTE (YAML)"
+    def get_metrics_mock(pod):
+        return [f"container_memory_usage_bytes{{pod='{pod}'}} 850Mi", f"kube_pod_container_status_restarts_total{{pod='{pod}'}} 4"]
 
-    def state_del(collection, key):
-        if rdb:
-            rdb.hdel(collection, key)
-        else:
-            _mem.get(collection, {}).pop(key, None)
+  evidence_engine.normalizer.py: |
+    import time, json
+    from .collectors import collect_k8s_assets, collect_live_yaml, get_metrics_mock
+    def package_evidence(pod, ns):
+        if not pod or pod == "N/A": return "Nenhuma evidência capturada (Pod N/A)."
+        describe, logs, events = collect_k8s_assets(pod, ns)
+        package = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "describe": describe, "logs": logs, "events": events, "live_yaml": collect_live_yaml(ns, describe), "metrics": get_metrics_mock(pod), "gitops_drift": "ArgoCD: OutOfSync"}
+        return json.dumps(package, indent=2)
 
-    def state_exists(collection, key):
-        if rdb:
-            return rdb.hexists(collection, key)
-        return key in _mem.get(collection, {})
+  renderer.forensic_markdown.py: |
+    def section(t, c): return f"\n{t}\n{c}\n" if c else ""
+    def code_block(l, c): return f"```{l}\n{c}\n```" if c else ""
+    def list_to_block(l, i): return code_block(l, "\n".join(i)) if i else ""
+    def metrics_block(m): return list_to_block("metrics", [f"{k} {v}" for k, v in m.items() if isinstance(m, dict)] or m) if m else ""
+    def render(d):
+        if not isinstance(d, dict): return d
+        ev = d.get("evidencias", {})
+        out = "INCIDENT FORENSIC REPORT\n────────────────────────\n"
+        out += section("Incident", d.get("incidente")) + section("Executive Summary", d.get("resumo_forense"))
+        out += section("Metrics (Prometheus)", metrics_block(ev.get("metricas"))) + section("Logs (Loki)", list_to_block("log", ev.get("logs")))
+        out += section("Kubernetes Events", list_to_block("event", ev.get("eventos"))) + section("Describe (kubectl)", code_block("describe", ev.get("describe")))
+        out += section("GitOps Context", code_block("gitops", ev.get("gitops"))) + section("Root Cause", d.get("causa_raiz"))
+        if d.get("yaml_sugerido"): out += section("Proposed Change", code_block("yaml", d.get("yaml_sugerido")))
+        out += section("Analysis Confidence", d.get("confianca"))
+        return out.strip()
 
-    _mem = {"pending": {}, "investigations": {}}
-
-    # v2.0: RabbitMQ async messaging
-    MQ_HOST = os.environ.get("RABBITMQ_HOST", "rabbitmq")
-    MQ_USER = os.environ.get("RABBITMQ_USER", "sre")
-    MQ_PASS = os.environ.get("RABBITMQ_PASS", "sre2026")
-    MQ_VHOST = os.environ.get("RABBITMQ_VHOST", "sre-ops")
-    MQ_QUEUE = "sre_tasks"
-    mq_conn = None; mq_channel = None
-
-    def mq_connect():
-        global mq_conn, mq_channel
-        if not pika:
-            print("WARN: pika not installed, MQ disabled", flush=True)
-            return False
-        try:
-            creds = pika.PlainCredentials(MQ_USER, MQ_PASS)
-            params = pika.ConnectionParameters(host=MQ_HOST, virtual_host=MQ_VHOST, credentials=creds, heartbeat=600, blocked_connection_timeout=300)
-            mq_conn = pika.BlockingConnection(params)
-            mq_channel = mq_conn.channel()
-            mq_channel.queue_declare(queue=MQ_QUEUE, durable=True)
-            print(f"DEBUG: RabbitMQ connected at {MQ_HOST}/{MQ_VHOST}", flush=True)
-            return True
-        except Exception as e:
-            print(f"WARN: RabbitMQ unavailable ({e}), falling back to sync", flush=True)
-            mq_conn = None; mq_channel = None
-            return False
-
-    def mq_publish(task_data):
-        global mq_conn, mq_channel
-        try:
-            if not mq_channel or mq_conn.is_closed:
-                if not mq_connect(): return False
-            mq_channel.basic_publish(
-                exchange='', routing_key=MQ_QUEUE,
-                body=json.dumps(task_data),
-                properties=pika.BasicProperties(delivery_mode=2)
-            )
-            print(f"DEBUG: Task published to MQ: {task_data.get('action_id', 'N/A')}", flush=True)
-            return True
-        except Exception as e:
-            print(f"WARN: MQ publish failed ({e}), falling back to sync", flush=True)
-            mq_conn = None; mq_channel = None
-            return False
-
-    def mq_consumer_thread():
-        while True:
-            try:
-                creds = pika.PlainCredentials(MQ_USER, MQ_PASS)
-                params = pika.ConnectionParameters(host=MQ_HOST, virtual_host=MQ_VHOST, credentials=creds, heartbeat=600)
-                conn = pika.BlockingConnection(params)
-                ch = conn.channel()
-                ch.queue_declare(queue=MQ_QUEUE, durable=True)
-                ch.basic_qos(prefetch_count=1)
-                print(f"DEBUG: MQ Consumer started on {MQ_QUEUE}", flush=True)
-                def callback(ch, method, properties, body):
-                    try:
-                        task = json.loads(body)
-                        print(f"DEBUG: MQ Consumer processing task {task.get('action_id', 'N/A')}", flush=True)
-                        process_llm_diagnosis(task)
-                        ch.basic_ack(delivery_tag=method.delivery_tag)
-                    except Exception as e:
-                        print(f"ERROR: MQ Consumer task failed: {e}", flush=True)
-                        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
-                ch.basic_consume(queue=MQ_QUEUE, on_message_callback=callback)
-                ch.start_consuming()
-            except Exception as e:
-                print(f"WARN: MQ Consumer disconnected ({e}), reconnecting in 10s...", flush=True)
-                time.sleep(10)
-
-    # v2.0.1: Prometheus internal metrics
-    if Counter:
-        METRIC_PR_CREATED = Counter('sre_prs_created_total', 'Total PRs created by DevOps Agent')
-        METRIC_ALERTS_RECEIVED = Counter('sre_alerts_received_total', 'Total alerts received by Orchestrator', ['severity', 'alertname'])
-        METRIC_TASK_LATENCY = Histogram('sre_task_latency_seconds', 'Latency of SRE tasks in seconds', ['phase'])
-    else:
-        METRIC_PR_CREATED = METRIC_ALERTS_RECEIVED = METRIC_TASK_LATENCY = None
-
-    if start_http_server:
-        try:
-            start_http_server(8000)
-            print("DEBUG: Prometheus metrics server on 8000", flush=True)
-        except Exception as e: print(f"WARN: Metrics server fail: {e}", flush=True)
-
-    # Start MQ consumer in background
-    mq_connect()
-    if pika:
-        t = threading.Thread(target=mq_consumer_thread, daemon=True)
-        t.start()
-    
-    def send_to_rocket(agent_role, text, aliases=None, attachments=None, thread_id=None, channel_override=None):
-        channels = {"orchestrator": "ops-warroom", "analyst": "ops-warroom", "devops": "ops-warroom", "warden": "ops-security", "archivist": "ops-history"}
-        target_channel = channel_override if channel_override else f"#{channels.get(agent_role, 'ops-warroom')}"
-        print(f"DEBUG: Rocket.Chat Sending to {target_channel} (Role: {agent_role})", flush=True)
-        payload = {"text": text, "alias": aliases or agent_role.capitalize()}
-        if attachments: payload["attachments"] = attachments
-        if thread_id:
-            payload["tmid"] = thread_id
-            payload["roomId"] = target_channel
-        else:
-            payload["channel"] = target_channel
-        
-        req_data = json.dumps(payload).encode()
-        print(f"DEBUG: Rocket.Chat Payload for {agent_role}: {json.dumps(payload)}", flush=True)
-        
-        req = urllib.request.Request(f"{RC_URL}/api/v1/chat.postMessage", data=req_data, headers={"Content-Type": "application/json", "X-Auth-Token": RC_TOKEN, "X-User-Id": RC_USER_ID})
-        try:
-            with urllib.request.urlopen(req, timeout=10) as r:
-                res = json.loads(r.read().decode())
-                if not res.get("success"):
-                    print(f"DEBUG: Rocket.Chat API Error: {res}", flush=True)
-                return res.get("message", {}).get("_id")
-        except Exception as e:
-            print(f"DEBUG: Rocket.Chat Send Exception: {e}", flush=True)
-            if hasattr(e, 'read'):
-                print(f"DEBUG: Rocket.Chat Error Body: {e.read().decode()}", flush=True)
-            return None
-    
-    def query_llm(sys_p, usr_p, max_tok=600):
-        req = urllib.request.Request(LM_STUDIO, data=json.dumps({"model": LM_MODEL, "messages": [{"role": "system", "content": sys_p}, {"role": "user", "content": usr_p}], "temperature": 0.2, "max_tokens": max_tok}).encode(), headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r: return json.loads(r.read().decode())["choices"][0]["message"]["content"], LM_MODEL
-        except: return "LLM Error", "offline"
-    
-    def k8s_request(method, path, body=None):
-        req = urllib.request.Request(K8S_URL + path, data=json.dumps(body).encode() if body else None, method=method, headers={"Authorization": "Bearer " + K8S_TOKEN, "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, context=CTX, timeout=10) as r: return r.getcode(), json.loads(r.read().decode())
-        except: return 500, {}
-    
-    def query_loki(app):
-        u = f"{LOKI_URL}?query={{pod=~'.*{app}.*'}}&limit=10"
-        try:
-            with urllib.request.urlopen(u) as r:
-                res = json.loads(r.read().decode()); logs = []
-                for s in res["data"]["result"]:
-                    for v in s["values"]: logs.append(v[1])
-                return "\n".join(logs[-10:])
-        except: return "Loki Error"
-    
-    def query_prometheus(app):
-        u_cpu = f"{PROM_URL}?query=sum(rate(container_cpu_usage_seconds_total{{pod=~'.*{app}.*'}}[5m]))"
-        u_mem = f"{PROM_URL}?query=sum(container_memory_usage_bytes{{pod=~'.*{app}.*'}})"
-        try:
-            with urllib.request.urlopen(u_cpu) as r:
-                res = json.loads(r.read().decode())
-                v_cpu = res["data"]["result"][0]["value"][1] if res["data"]["result"] else "0"
-            with urllib.request.urlopen(u_mem) as r:
-                res = json.loads(r.read().decode())
-                v_mem = res["data"]["result"][0]["value"][1] if res["data"]["result"] else "0"
-            return f"CPU: {float(v_cpu):.4f} cores, RAM: {int(float(v_mem))/1024/1024:.2f} Mi"
-        except: return "Prom Error"
-    
-    def wait_for_resource_health(deploy, ns, timeout=120):
-        t_end = time.time() + timeout
-        while time.time() < t_end:
-            c, o = k8s_request("GET", f"/apis/apps/v1/namespaces/{ns}/deployments/{deploy}")
-            if c == 200:
-                s = o.get("status", {}); av = s.get("availableReplicas", 0); rep = o.get("spec", {}).get("replicas", 1)
-                if av >= rep: return True, "Healthy"
-            time.sleep(10)
-        return False, "Timeout"
-    
-    def archivist_postmortem(action, action_id, trace_id, thread_id):
-        a = action["alert"]; l = a.get("labels", {}); alertname = l.get("alertname", ""); ns = action["ns"]; deploy = action["deploy"]
-        healthy, _ = wait_for_resource_health(deploy, ns)
-        if not healthy: 
-            inv_key = f"{ns}/{deploy}"
-            if state_get("investigations", inv_key) == trace_id: state_del("investigations", inv_key)
-            return
-        mttr = "N/A"
-        try:
-            st = datetime.datetime.fromisoformat(a.get("startsAt", "").replace("Z", "+00:00"))
-            en = datetime.datetime.now(datetime.timezone.utc); mttr = f"{(en-st).total_seconds()/60:.1f} min"
-        except: pass
-        md, _ = query_llm("SRE Post-Mortem Writer.", f"Incident: {alertname} in {deploy}\nDiag: {action['diag']}\nFix: {action['desc']}\nMTTR: {mttr}", 800)
-        fn = f"postmortems/{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M')}-{alertname}.md"
-        body = {"content": base64.b64encode(md.encode()).decode(), "message": "PM Archive", "branch": "main"}
-        try: urllib.request.urlopen(urllib.request.Request(GITEA_API+fn, data=json.dumps(body).encode(), headers={"Authorization": "Basic "+GITEA_CREDS, "Content-Type": "application/json"}))
-        except: pass
-        inv_key = f"{ns}/{deploy}"
-        if state_get("investigations", inv_key) == trace_id: state_del("investigations", inv_key)
-
-    def clean_manifest(man):
-        m = copy.deepcopy(man)
-        m.pop("status", None)
-        meta = m.get("metadata", {})
-        for k in ["creationTimestamp", "resourceVersion", "uid", "generation", "managedFields"]:
-            meta.pop(k, None)
-        return m
-
-    def workflow_critical(alert):
-        try:
-            print(f"DEBUG: [START] workflow_critical for {alert.get('labels',{}).get('alertname')}", flush=True)
-            trace_id = str(uuid.uuid4()); l = alert.get("labels", {}); severity = l.get("severity", "critical")
-            ns, pod, alertname = l.get("namespace", "N/A"), l.get("pod", "N/A"), l.get("alertname", "Unknown")
-            
-            if METRIC_ALERTS_RECEIVED: 
-                try: METRIC_ALERTS_RECEIVED.labels(severity=severity, alertname=alertname).inc()
-                except Exception as me: print(f"DEBUG: Metric Error: {me}", flush=True)
-            
-            deploy = l.get("deployment")
-            if not deploy:
-                if pod.count("-") >= 2: deploy = "-".join(pod.split("-")[:-2])
-                else: deploy = pod.split("-")[0] if "-" in pod else pod
-            
-            inv_key = f"{ns}/{deploy}"; channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
-            print(f"DEBUG: Checking investigation for {inv_key}", flush=True)
-            if state_exists("investigations", inv_key): 
-                print(f"DEBUG: Alert {inv_key} already in active_investigations", flush=True)
-                return
-            
-            state_set("investigations", inv_key, trace_id)
-            print(f"DEBUG: Sending initial alert to RC thread...", flush=True)
-            tid = send_to_rocket("orchestrator", f"🚨 **{severity.upper()}:** {alertname}\nNS: `{ns}` | Pod: `{pod}`", channel_override=channel)
-            print(f"DEBUG: RC Thread ID: {tid}", flush=True)
-        except Exception as e:
-            print(f"ERROR in workflow_critical: {e}", flush=True)
-            import traceback; traceback.print_exc()
-            return
-        
-        # Phase 1: Gather evidence (fast)
-        print(f"DEBUG: Querying Loki and Prometheus for {deploy}...", flush=True)
-        logs = query_loki(deploy); metrics = query_prometheus(deploy)
-        print(f"DEBUG: Querying K8s manifest for {deploy} in {ns}...", flush=True)
-        c, manifest = k8s_request("GET", f"/apis/apps/v1/namespaces/{ns}/deployments/{deploy}")
-        
-        rel_pm = []
-        try:
-            pm_list = os.listdir("/repo/postmortems")
-            print(f"DEBUG: Scanning /repo/postmortems: {pm_list}", flush=True)
-            rel_pm = [f for f in pm_list if deploy.lower() in f.lower() or alertname.lower() in f.lower()]
-            print(f"DEBUG: Matches found: {rel_pm}", flush=True)
-        except Exception as e: print(f"DEBUG: PM Scan Error: {e}", flush=True)
-
-        action_id = hashlib.md5((alertname+ns+pod+str(time.time())).encode()).hexdigest()[:12]
-        
-        # Phase 2: Publish to MQ or fallback to sync
-        task_payload = {
-            "action_id": action_id, "alert": alert, "trace_id": trace_id,
-            "ns": ns, "pod": pod, "deploy": deploy, "alertname": alertname,
-            "severity": severity, "channel": channel, "thread_id": tid,
-            "logs": logs[:2000], "metrics": metrics, "manifest": manifest,
-            "rel_pm": rel_pm
-        }
-        
-        if mq_publish(task_payload):
-            send_to_rocket("orchestrator", "⏳ Diagnóstico enfileirado (async via MQ)...", thread_id=tid, channel_override=channel)
-            print(f"DEBUG: Task {action_id} published to MQ, returning immediately", flush=True)
-        else:
-            print(f"DEBUG: MQ unavailable, processing synchronously", flush=True)
-            process_llm_diagnosis(task_payload)
-
-    def process_llm_diagnosis(task):
-        action_id = task["action_id"]; alert = task["alert"]; trace_id = task["trace_id"]
-        ns = task["ns"]; pod = task["pod"]; deploy = task["deploy"]
-        alertname = task["alertname"]; severity = task["severity"]
-        channel = task["channel"]; tid = task["thread_id"]
-        logs = task["logs"]; metrics = task["metrics"]; manifest = task["manifest"]
-        rel_pm = task["rel_pm"]
-        
-        print(f"DEBUG: Processing LLM diagnosis for {action_id}...", flush=True)
-        pm_files = ", ".join(rel_pm) if rel_pm else "Nenhum encontrado"
-        current_res = json.dumps(manifest.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [{}])[0].get('resources', {}), indent=2)
-        
-        sys_p = f"""Você é o SRE Analyst da Digital Twin. RESPOSTA EM PORTUGUÊS (BRASIL).
-        Siga este formato Markdown RIGOROSAMENTE:
-        1. **Resumo do Incidente**: O que está acontecendo e impacto.
-        2. **Evidências Técnicas**: 
-           - **Logs do Loki**:
-           ```text
-           {logs[:800].replace('`', "'")}
-           ```
-           - **Métricas Prometheus**: {metrics}
-        3. **Análise de Causa Raiz**: O porquê técnico (ex: OOM, Limits).
-        4. **Contexto Histórico**: Postmortems relacionados: {pm_files}.
-        5. **Sugestão de Correção**:
-           - **Trecho Atual (YAML)**:
-           ```yaml
-           {current_res}
-           ```
-           - **Trecho Sugerido (YAML)**:
-           ```yaml
-           resources:
-             limits:
-               memory: "128Mi"
-               cpu: "100m"
-           ```
-        """
-        diag, _ = query_llm(sys_p, f"Incident: {alertname} in {deploy}. Respond in Portuguese.", 1000)
-        print(f"DEBUG: LLM Diag received for {action_id}", flush=True)
-        send_to_rocket("analyst", f"🔍 **Diagnóstico Detalhado**\n{diag}", thread_id=tid, channel_override=channel)
-        
-        fix_desc = "Rollout Restart"
-        m = re.search(r"FIX_SUGGESTION\s*[:*]+\s*(.*)", diag, re.I)
-        if m: fix_desc = m.group(1).split('\n')[0].strip()
-        
-        try:
-            yaml_match = re.search(r"Trecho Sugerido \(YAML\).*?```yaml\n(.*?)\n```", diag, re.DOTALL | re.IGNORECASE)
-            if yaml_match:
-                suggested_res = yaml.safe_load(yaml_match.group(1))
-                def find_res(d):
-                    if isinstance(d, dict):
-                        if "resources" in d: return d["resources"]
-                        if "limits" in d or "requests" in d: return d
-                        for v in d.values():
-                            r = find_res(v)
-                            if r: return r
-                    elif isinstance(d, list):
-                        for i in d:
-                            r = find_res(i)
-                            if r: return r
-                    return None
-                
-                res_dict = find_res(suggested_res)
-                if res_dict is not None:
-                    for container in manifest.get("spec", {}).get("template", {}).get("spec", {}).get("containers", []):
-                        container["resources"] = res_dict
-                    if fix_desc == "Rollout Restart": fix_desc = "Ajuste de resources limits recomendado pelo Analyst"
-                    print(f"DEBUG: Applied LLM resources patch to manifest", flush=True)
-        except Exception as e:
-            print(f"WARN: Failed to parse suggested YAML: {e}", flush=True)
-        
-        if "cache-engine" in deploy and ("invalid-config-flag" in diag.lower() or "--invalid-config-flag-test" in diag):
-            print(f"DEBUG: Detected invalid flag in Redis, applying fix to manifest", flush=True)
-            for container in manifest["spec"]["template"]["spec"]["containers"]:
-                if "args" in container: container["args"] = [a for a in container["args"] if a != "--invalid-config-flag-test"]
-            fix_desc = "Removendo flag inválida do Redis"
-            
-        manifest.setdefault("spec", {}).setdefault("template", {}).setdefault("metadata", {}).setdefault("annotations", {})["restartedAt"] = str(time.time())
-        path = f"app/{deploy}.yaml" if deploy in ["api-gateway", "cache-engine"] else f"app-production/{deploy}.yaml" if ns == "app-production" else f"namespaces/{ns}/{deploy}/deployment.yaml"
-        vscode_link = f"vscode://file/home/marcelo/lab-infra-repo/manifests/{path}"
-        gitea_link = f"http://gitea.127.0.0.1.nip.io:3000/marcelo/target-app-infra/src/branch/main/manifests/{path}"
-        
-        clean_man = clean_manifest(manifest)
-        action_data = {"alert": alert, "manifest_str": yaml.dump(clean_man, default_flow_style=False), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diag, "trace_id": trace_id, "thread_id": tid, "file_path": path, "channel": channel, "status": "pending"}
-        state_set("pending", action_id, action_data)
-        print(f"DEBUG: Invoking DevOps proposal for {action_id}...", flush=True)
-        executor.submit(devops_propose, action_id)
-        print(f"DEBUG: process_llm_diagnosis completed for {action_id} - handing over to devops", flush=True)
-
-    def devops_propose(action_id):
-        a = state_get("pending", action_id)
-        if not a: return
-        import subprocess
-        GITEA_HTTP = "http://marcelo:password123@gitea-http.gitops.svc.cluster.local:3000/marcelo/target-app-infra.git"
-        GITEA_API_BASE = "http://gitea-http.gitops.svc.cluster.local:3000/api/v1/repos/marcelo/target-app-infra"
-        branch_name = f"fix/{action_id}"
-        full_path = f"/repo/manifests/{a['file_path']}"
-        try:
-            for cmd in [
-                ["git", "config", "--global", "user.email", "devops@sre.com"],
-                ["git", "config", "--global", "user.name", "AI DevOps"],
-                ["git", "config", "--global", "safe.directory", "/repo"]
-            ]: subprocess.run(cmd, cwd="/repo", capture_output=True)
-            subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
-            subprocess.run(["git", "pull", GITEA_HTTP, "main"], cwd="/repo", capture_output=True)
-            subprocess.run(["git", "checkout", "-b", branch_name], cwd="/repo", capture_output=True)
-            os.makedirs(os.path.dirname(full_path), exist_ok=True)
-            with open(full_path, "w") as f: f.write(a["manifest_str"])
-            subprocess.run(["git", "add", "."], cwd="/repo", capture_output=True)
-            subprocess.run(["git", "commit", "-m", f"fix({a['deploy']}): {a['desc']}"], cwd="/repo", capture_output=True)
-            if subprocess.run(["git", "push", GITEA_HTTP, branch_name], cwd="/repo", capture_output=True).returncode != 0:
-                send_to_rocket("devops", "❌ **ERRO:** Push da branch falhou.", thread_id=a["thread_id"], channel_override=a["channel"])
-                return
-            pr_body = {"title": f"fix({a['deploy']}): {a['desc']}", "head": branch_name, "base": "main", "body": f"Trabalho do DevOps Agent.\n\n**Action ID:** {action_id}"}
-            pr_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls", data=json.dumps(pr_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"})
-            with urllib.request.urlopen(pr_req, timeout=15) as r:
-                pr_data = json.loads(r.read().decode())
-                pr_number = pr_data["number"]
-                pr_url = pr_data["html_url"]
-            if METRIC_PR_CREATED: METRIC_PR_CREATED.inc()
-            send_to_rocket("devops", f"🛠️ **GitOps Patch: {action_id}**\nSolução gerada: {a['desc']}\n📋 **Pull Request #{pr_number} criado**\n[🔗 Ver no Gitea]({pr_url.replace('gitea-http.gitops.svc.cluster.local:3000', 'gitea.127.0.0.1.nip.io:3000')})", thread_id=a["thread_id"], channel_override=a["channel"])
-            executor.submit(warden_audit, action_id, pr_number, pr_url, branch_name)
-        except Exception as e:
-            send_to_rocket("devops", f"❌ **ERRO no DevOps Workflow:** {str(e)[:200]}", thread_id=a["thread_id"], channel_override=a["channel"])
-
-    def warden_audit(action_id, pr_number, pr_url, branch_name):
-        a = state_get("pending", action_id)
-        if not a: return
-        try:
-            GITEA_API_BASE = "http://gitea-http.gitops.svc.cluster.local:3000/api/v1/repos/marcelo/target-app-infra"
-            patch_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls/{pr_number}.patch", headers={"Authorization": "Basic " + GITEA_CREDS})
-            with urllib.request.urlopen(patch_req, timeout=15) as r: patch_data = r.read().decode()
-            warden_prompt = f"Você é The Warden, Juiz de Governança SRE. Audite este patch. Se a alteração ajustar limites de recursos (resources) ou o campo 'restartedAt' para reiniciar pods e mitigar alertas, considere seguro. Responda OBRIGATORIAMENTE com 'APPROVED' se seguro, ou 'REJECTED' se destrutivo.\n\nPATCH:\n{patch_data}"
-            decision, _ = query_llm("Juiz de Governança.", warden_prompt, 300)
-            send_to_rocket("warden", f"🛡️ **Warden Audit Analysis**\n{decision}", thread_id=a["thread_id"], channel_override=a["channel"])
-            if "APPROVED" in decision.upper():
-                merge_body = {"Do": "merge", "merge_message_field": f"Merge fix({a['deploy']}): {a['desc']}"}
-                merge_req = urllib.request.Request(f"{GITEA_API_BASE}/pulls/{pr_number}/merge", data=json.dumps(merge_body).encode(), headers={"Authorization": "Basic " + GITEA_CREDS, "Content-Type": "application/json"}, method="POST")
-                urllib.request.urlopen(merge_req, timeout=15)
-                send_to_rocket("warden", f"🟢 **Merge autorizado e executado**. Rollout do patch PR #{pr_number} em andamento.", thread_id=a["thread_id"], channel_override=a["channel"])
-                import subprocess
-                subprocess.run(["git", "checkout", "main"], cwd="/repo", capture_output=True)
-                subprocess.run(["git", "pull", "http://marcelo:password123@gitea-http.gitops.svc.cluster.local:3000/marcelo/target-app-infra.git", "main"], cwd="/repo", capture_output=True)
-                subprocess.run(["git", "branch", "-D", branch_name], cwd="/repo", capture_output=True)
-                try: urllib.request.urlopen(urllib.request.Request(f"{GITEA_API_BASE}/branches/{branch_name}", headers={"Authorization": "Basic " + GITEA_CREDS}, method="DELETE"), timeout=10)
-                except: pass
-                a["status"] = "approved"
-                state_set("pending", action_id, a)
-                executor.submit(archivist_postmortem, a, action_id, a["trace_id"], a["thread_id"])
-            else:
-                a["status"] = "rejected"
-                state_set("pending", action_id, a)
-                inv_key = f"{a['ns']}/{a['deploy']}"
-                if state_get("investigations", inv_key) == a["trace_id"]: state_del("investigations", inv_key)
-                send_to_rocket("warden", f"🔴 **Patch Rejeitado**. Incidentes devem ser analisados manualmente.", thread_id=a["thread_id"], channel_override=a["channel"])
-        except Exception as e:
-            send_to_rocket("warden", f"❌ **ERRO na Governança:** {str(e)[:200]}", thread_id=a["thread_id"], channel_override=a["channel"])
-
-    class Handler(http.server.BaseHTTPRequestHandler):
+  runtime.orchestrator.py: |
+    import json, os, uuid, sys; sys.path.append('/etc/ai-ops/scripts')
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    class WebhookHandler(BaseHTTPRequestHandler):
         def do_POST(self):
-            try:
-                d = json.loads(self.rfile.read(int(self.headers["Content-Length"])).decode())
-                print(f"DEBUG: POST received with {len(d.get('alerts',[]))} alerts", flush=True)
-                for a in d.get("alerts", []):
-                    l = a.get("labels", {}); alertname = l.get("alertname", ""); severity = l.get("severity", "unknown")
-                    if a.get("status") == "resolved":
-                        channel = "#ops-warroom" if severity == "critical" or alertname == "KubePodCrashLooping" else "#ops-logs"
-                        send_to_rocket("orchestrator", f"🟢 **INCIDENTE RESOLVIDO:** {alertname}\nO sistema estabilizou.", channel_override=channel)
-                        continue
-                    print(f"DEBUG: Routing alert {alertname} ({severity})", flush=True)
-                    if severity == "critical" or "Watchdog" in alertname or alertname == "KubePodCrashLooping": executor.submit(workflow_critical, a)
-                    else: send_to_rocket("analyst", f"⚠️ **Monitoramento:** {alertname}", channel_override="#ops-logs")
-                self.send_response(200); self.end_headers(); self.wfile.write(b"OK")
-            except Exception as e:
-                print(f"ERROR in do_POST: {e}", flush=True)
-                self.send_response(500); self.end_headers()
-        def do_GET(self):
-            p = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(p.query); aid = q.get("id", [""])[0]
-            h = "OK"
-            if p.path == "/approve": h = handle_approve(aid)
-            elif p.path == "/reject": h = handle_reject(aid)
-            self.send_response(200); self.end_headers(); self.wfile.write(h.encode())
+            data = json.loads(self.rfile.read(int(self.headers['Content-Length'])).decode())
+            tm = ThreadManager()
+            for alert in data.get('alerts', []):
+                tid = str(uuid.uuid4())[:8]; labels = alert.get('labels', {})
+                with open("/etc/ai-ops/agents/orchestrator/skill.md", "r") as f: template = f.read()
+                msg = template.format(alertname=labels.get('alertname', 'Alerta'), pod=labels.get('pod', 'N/A'), ns=labels.get('namespace', 'N/A'), summary=alert.get('annotations', {}).get('summary', 'Sem sumário'), trace_id=tid)
+                msg_id = send_to_rocket("orchestrator", msg)
+                if msg_id: tm.set_thread(tid, msg_id)
+                tm.save_evidence(tid, json.dumps(alert))
+                conn = get_mq_conn(); ch = conn.channel()
+                ch.queue_declare(queue='sre_tasks', durable=True); ch.basic_publish(exchange='', routing_key='sre_tasks', body=json.dumps({"trace_id": tid, "thread_id": msg_id}))
+                conn.close()
+            self.send_response(200); self.end_headers()
+    if __name__ == "__main__": HTTPServer(('0.0.0.0', 8080), WebhookHandler).serve_forever()
 
-    print("Orchestrator v7.5 Staff Online on 8080"); socketserver.TCPServer.allow_reuse_address = True
-    httpd = socketserver.TCPServer(("", 8080), Handler); httpd.serve_forever()
+  runtime.analyst.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    from runtime.llm_gateway import call_llm
+    from evidence_engine.normalizer import package_evidence
+    from renderer.forensic_markdown import render
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx.get('trace_id', 'unknown'); tm = ThreadManager()
+            tmid = ctx.get('thread_id') or tm.get_thread(tid); alert_raw = tm.get_evidence(tid); alert = json.loads(alert_raw)
+            enriched = package_evidence(alert.get('labels', {}).get('pod', 'N/A'), alert.get('labels', {}).get('namespace', 'default'))
+            raw_ai = call_llm("analyst", f"ALERTA: {alert_raw}\n\nEVIDENCIAS:\n{enriched}", trace_id=tid)
+            try: laudo = render(json.loads(raw_ai))
+            except: laudo = raw_ai
+            send_to_rocket("analyst", laudo, tmid=tmid); tm.save_analysis(tid, laudo)
+            conn = get_mq_conn(); ch_out = conn.channel(); ch_out.queue_declare(queue='sre_warden', durable=True)
+            ch_out.basic_publish(exchange='', routing_key='sre_warden', body=json.dumps(ctx)); conn.close(); ch.basic_ack(delivery_tag=method.delivery_tag)
+        except Exception as e: print(f"Error: {e}"); ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_tasks', durable=True); ch.basic_consume(queue='sre_tasks', on_message_callback=callback); ch.start_consuming()
+
+  runtime.warden.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    from runtime.llm_gateway import call_llm
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx['trace_id']; tm = ThreadManager()
+            raw_ai = call_llm("warden", f"ANALISE: {tm.get_analysis(tid)}", trace_id=tid)
+            try: data = json.loads(raw_ai); veredito = data.get('veredito', 'REPROVADO').upper(); justificativa = data.get('justificativa', raw_ai)
+            except: veredito = "REPROVADO"; justificativa = raw_ai
+            send_to_rocket("warden", justificativa, tmid=tm.get_thread(tid))
+            if veredito == "APROVADO":
+                conn = get_mq_conn(); ch_out = conn.channel(); ch_out.queue_declare(queue='sre_audit', durable=True)
+                ch_out.basic_publish(exchange='', routing_key='sre_audit', body=json.dumps(ctx)); conn.close()
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except Exception as e: print(f"Error: {e}"); ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_warden', durable=True); ch.basic_consume(queue='sre_warden', on_message_callback=callback); ch.start_consuming()
+
+  runtime.auditor.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn, send_to_rocket
+    from runtime.thread_manager import ThreadManager
+    def callback(ch, method, props, body):
+        try:
+            ctx = json.loads(body.decode()); tid = ctx['trace_id']; tm = ThreadManager()
+            if tm.r.get(f"status:{tid}") == "resolved" and not tm.r.get(f"prompt_sent:{tid}"):
+                send_to_rocket("auditor", "✅ **Sistema Estabilizado Técnico.**\nMarcelo, informe:\n1. O que foi feito?\n2. Como foi feito?\n3. Por quê foi feito?", tmid=tm.get_thread(tid))
+                tm.r.set(f"prompt_sent:{tid}", "true", ex=3600)
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+        except: ch.basic_ack(delivery_tag=method.delivery_tag)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_audit', durable=True); ch.basic_consume(queue='sre_audit', on_message_callback=callback); ch.start_consuming()
+
+  runtime.archivist.py: |
+    import json, os, pika, sys; sys.path.append('/etc/ai-ops/scripts')
+    from runtime.messaging import get_mq_conn; from runtime.thread_manager import ThreadManager
+    def callback(ch, method, props, body):
+        try: tid = json.loads(body.decode())['trace_id']; ThreadManager().r.set(f"archive:{tid}", body.decode(), ex=604800)
+        except: pass
+        ch.basic_ack(delivery_tag=method.delivery_tag)
+    if __name__ == "__main__":
+        ch = get_mq_conn().channel(); ch.queue_declare(queue='sre_archive', durable=True); ch.basic_consume(queue='sre_archive', on_message_callback=callback); ch.start_consuming()

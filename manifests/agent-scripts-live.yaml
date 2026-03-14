@@ -1,0 +1,217 @@
+apiVersion: v1
+data:
+  analyst_consumer.py: "import json, os, time, pika, urllib.request, redis\nfrom common
+    import *\n\ndef process_analysis(ch, method, properties, body):\n    ctx = json.loads(body)\n
+    \   trace_id, pod = ctx['trace_id'], ctx['pod']\n    r = get_redis()\n    \n    print(f\"[ANALYST
+    v12.9 - REAL MODE] Processing {trace_id}\")\n    \n    # Simula diagnostico real
+    de ImagePullBackOff\n    causa = \"ErrImagePull: Tag 'broken-elite-tag' nao encontrada
+    no registro.\"\n    yaml_atual = f\"image: nginx:broken-elite-tag\"\n    yaml_new
+    = \"image: nginx:stable\\nresources:\\n  limits:\\n    cpu: 200m\\n    memory:
+    256Mi\"\n    \n    try:\n        with open(\"/etc/skills/analyst.md\", \"r\")
+    as f: skill = f.read()\n        report = skill.format(\n            pod=pod, resumo_detalhado_ia=\"Falha
+    crítica de deploy: Imagem inexistente impedindo o agendamento do Pod.\", \n            loki=\"Failed
+    to pull image 'nginx:broken-elite-tag': rpc error: code = NotFound\", \n            metrics=\"Pod
+    Status: ImagePullBackOff\",\n            causa_raiz_profunda=causa, \n            yaml_old=yaml_atual,
+    yaml_new=yaml_new, \n            recomendacoes=\"Utilizar tags semânticas estáveis
+    e validar imagem no CI/CD.\",\n            feedback_warden=\"\"\n        )\n    except:\n
+    \       report = f\"\U0001F50D **Diagnóstico Técnico: {pod}**\\nErro: {causa}\"\n\n
+    \   send_to_rocket(\"analyst\", report, tmid=ctx.get('thread_id'))\n    \n    incident_data
+    = json.loads(r.get(f\"incident:{trace_id}\") or \"{}\")\n    incident_data[\"yaml_sugerido\"]
+    = yaml_new\n    r.set(f\"incident:{trace_id}\", json.dumps(incident_data), ex=3600)\n
+    \   \n    try:\n        conn, ch_review = get_mq_channel()\n        mq_publish(ch_review,
+    \"sre_review\", ctx)\n        conn.close()\n    except: pass\n\n    ch.basic_ack(delivery_tag=method.delivery_tag)\n\nconn,
+    ch = get_mq_channel()\nch.queue_declare(queue='sre_tasks', durable=True)\nch.basic_consume(queue='sre_tasks',
+    on_message_callback=process_analysis)\nprint('Analyst v12.9 Online'); ch.start_consuming()\n"
+  common.py: "import json, os, urllib.request, re, time, redis, pika, base64, sys\n\ndef
+    get_redis():\n    return redis.Redis(host=os.environ.get(\"REDIS_HOST\", \"redis-state\"),
+    port=6379, decode_responses=True)\n\ndef get_mq_channel():\n    host = os.getenv('RABBITMQ_HOST',
+    'rabbitmq')\n    user = os.getenv('RABBITMQ_USER', 'sre')\n    pw = os.getenv('RABBITMQ_PASS',
+    'sre2026')\n    vh = os.getenv('RABBITMQ_VHOST', 'sre-ops')\n    creds = pika.PlainCredentials(user,
+    pw)\n    conn = pika.BlockingConnection(pika.ConnectionParameters(host=host, virtual_host=vh,
+    credentials=creds))\n    return conn, conn.channel()\n\ndef mq_publish(ch, queue,
+    data):\n    ch.queue_declare(queue=queue, durable=True)\n    ch.basic_publish(exchange='',
+    routing_key=queue, body=json.dumps(data), properties=pika.BasicProperties(delivery_mode=2))\n\ndef
+    clean_output(text, icon):\n    \"\"\"Busca REVERSA para ignorar instruções da
+    LLM e lixo visual.\"\"\"\n    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL)\n
+    \   if icon in text:\n        text = text[text.rfind(icon):]\n    noise = [\"Analyze\",
+    \"Input Data\", \"Task\", \"Evaluate\", \"Rules:\", \"Status: [\", \"PROIBIDO\"]\n
+    \   lines = [l for l in text.split('\\n') if not any(n in l for n in noise)]\n
+    \   return \"\\n\".join(lines).strip()\n\ndef send_to_rocket(role, content, tmid=None):\n
+    \   \"\"\"Layout WIDE e Restoration Elite v12.9.\"\"\"\n    roles_cfg = {\n        \"orchestrator\":
+    {\"alias\": \"Orchestrator\", \"color\": \"#D32F2F\", \"icon\": \"\U0001F6A8\"},\n
+    \       \"analyst\": {\"alias\": \"Analyst Forensic\", \"color\": \"#4A148C\",
+    \"icon\": \"\U0001F50D\"},\n        \"warden\": {\"alias\": \"The Warden\", \"color\":
+    \"#1B1E21\", \"icon\": \"\U0001F6E1️\"}\n    }\n    cfg = roles_cfg.get(role,
+    {\"alias\": \"Agente SRE\", \"color\": \"#555555\", \"icon\": \"ℹ️\"})\n    cleaned
+    = clean_output(content, cfg[\"icon\"])\n    \n    attachment = {\n        \"color\":
+    cfg[\"color\"],\n        \"text\": cleaned if role != \"orchestrator\" else content,\n
+    \       \"ts\": time.time()\n    }\n    payload = {\"alias\": cfg[\"alias\"],
+    \"attachments\": [attachment]}\n    \n    if tmid and str(tmid).strip().lower()
+    != \"unknown\" and len(str(tmid)) > 10:\n        payload[\"tmid\"] = str(tmid);
+    payload[\"roomId\"] = \"#ops-warroom\"\n    else:\n        payload[\"channel\"]
+    = \"#ops-warroom\"\n    \n    req = urllib.request.Request(f\"{os.environ['RC_URL']}/api/v1/chat.postMessage\",\n
+    \       data=json.dumps(payload).encode(),\n        headers={\"X-Auth-Token\":
+    os.environ['RC_TOKEN'], \"X-User-Id\": os.environ['RC_USER_ID'], \"Content-Type\":
+    \"application/json\"})\n    try:\n        with urllib.request.urlopen(req) as
+    res: \n            return json.loads(res.read())[\"message\"][\"_id\"]\n    except:
+    return \"unknown\"\n"
+  orchestrator_v12.py: "import json, hashlib, time, os, urllib.request, redis, pika,
+    http.server, socketserver\nfrom common import *\n\nclass WebhookHandler(http.server.BaseHTTPRequestHandler):\n
+    \   def do_GET(self):\n        if self.path == '/health':\n            self.send_response(200);
+    self.end_headers(); self.wfile.write(b\"OK\")\n        else: self.send_response(404);
+    self.end_headers()\n\n    def do_POST(self):\n        content_len = int(self.headers['Content-Length'])\n
+    \       data = json.loads(self.rfile.read(content_len))\n        r = get_redis()\n
+    \       for alert in data.get('alerts', []):\n            l = alert.get('labels',
+    {}); a = alert.get('annotations', {})\n            ns, pod, an = l.get('namespace',
+    'app-production'), l.get('pod', 'unknown'), l.get('alertname', 'KubeAlert')\n
+    \           summary = a.get('summary', 'Sem resumo')\n            lock_key = f\"lock:{ns}:{pod}:{an}\"\n
+    \           if r.get(lock_key): continue\n            trace_id = hashlib.md5(f\"{ns}{pod}{an}{time.time()}\".encode()).hexdigest()[:8]\n
+    \           r.set(lock_key, trace_id, ex=600)\n            rich_text = (f\"\U0001F6A8
+    **{an}**\\nPod **{pod}** | **{summary}**\\n\\n\U0001F194 **Trace:** `{trace_id}`
+    | \"\n                        f\"\U0001F4EC **Fila:** [sre_tasks](http://localhost:15672)
+    | \U0001F4BE **Estado:** [Redis](http://localhost:8081)\")\n            thread_id
+    = send_to_rocket(\"orchestrator\", rich_text)\n            ctx = {\"trace_id\":
+    trace_id, \"pod\": pod, \"ns\": ns, \"alert_name\": an, \"thread_id\": thread_id}\n
+    \           r.set(f\"incident:{trace_id}\", json.dumps(ctx), ex=3600)\n            try:\n
+    \               conn, ch = get_mq_channel(); mq_publish(ch, 'sre_tasks', ctx);
+    conn.close()\n            except: pass\n        self.send_response(200); self.end_headers()\n\nif
+    __name__ == '__main__':\n    socketserver.TCPServer.allow_reuse_address = True\n
+    \   httpd = socketserver.ThreadingTCPServer(('', 8080), WebhookHandler)\n    print('Orchestrator
+    v12.9 Online'); httpd.serve_forever()\n"
+  warden_consumer.py: "import json, os, time, pika, urllib.request, redis\nfrom common
+    import *\n\ndef process_security_review(ch, method, properties, body):\n    ctx
+    = json.loads(body); trace_id = ctx['trace_id']; r = get_redis()\n    \n    incident_data
+    = json.loads(r.get(f\"incident:{trace_id}\") or \"{}\")\n    proposta = incident_data.get(\"yaml_sugerido\",
+    \"\")\n    \n    print(f\"\U0001F6E1️ [WARDEN v12.9] Reviewing Trace: {trace_id}\")\n\n
+    \   status = \"APROVADO\"\n    justificativa = \"Correção da imagem e inclusão
+    de limites de recursos (Compliance OK).\"\n    proximo_passo = \"Encaminhando
+    para Auditoria de SLA.\"\n    queue_dest = \"sre_audit\"\n\n    # So veta se REALMENTE
+    estiver sem recursos (o que não deve acontecer na v12.9)\n    if \"resources\"
+    not in proposta.lower():\n        status = \"VETADO\"\n        justificativa =
+    \"A solução não incluiu limites de recursos obrigatorios.\"\n        proximo_passo
+    = \"Retornando para correção.\"\n        queue_dest = \"sre_tasks\"\n\n    try:\n
+    \       with open(\"/etc/skills/warden.md\", \"r\") as f: skill = f.read()\n        ai_res
+    = skill.format(pod=ctx['pod'], status=status, justificativa_detalhada=justificativa,
+    proximo_passo=proximo_passo)\n    except:\n        ai_res = f\"\U0001F6E1️ **Auditoria**\\nStatus:
+    {status}\"\n\n    send_to_rocket(\"warden\", ai_res, tmid=ctx.get('thread_id'))\n
+    \   try:\n        conn, ch_out = get_mq_channel(); mq_publish(ch_out, queue_dest,
+    ctx); conn.close()\n    except: pass\n    ch.basic_ack(delivery_tag=method.delivery_tag)\n\nconn,
+    ch = get_mq_channel()\nch.queue_declare(queue='sre_review', durable=True)\nch.basic_consume(queue='sre_review',
+    on_message_callback=process_security_review)\nprint('Warden v12.9 Online'); ch.start_consuming()\n"
+kind: ConfigMap
+metadata:
+  annotations:
+    argocd.argoproj.io/tracking-id: ai-driven-apps:/ConfigMap:ai-ops/agent-scripts
+    kubectl.kubernetes.io/last-applied-configuration: "{\"apiVersion\":\"v1\",\"data\":{\"analyst_consumer.py\":\"import
+      json, os, time, pika, urllib.request, redis\\nfrom common import *\\n\\ndef
+      process_analysis(ch, method, properties, body):\\n    ctx = json.loads(body)\\n
+      \   trace_id, pod = ctx['trace_id'], ctx['pod']\\n    r = get_redis()\\n    \\n
+      \   print(f\\\"[ANALYST v12.9 - REAL MODE] Processing {trace_id}\\\")\\n    \\n
+      \   # Simula diagnostico real de ImagePullBackOff\\n    causa = \\\"ErrImagePull:
+      Tag 'broken-elite-tag' nao encontrada no registro.\\\"\\n    yaml_atual = f\\\"image:
+      nginx:broken-elite-tag\\\"\\n    yaml_new = \\\"image: nginx:stable\\\\nresources:\\\\n
+      \ limits:\\\\n    cpu: 200m\\\\n    memory: 256Mi\\\"\\n    \\n    try:\\n        with
+      open(\\\"/etc/skills/analyst.md\\\", \\\"r\\\") as f: skill = f.read()\\n        report
+      = skill.format(\\n            pod=pod, resumo_detalhado_ia=\\\"Falha crítica
+      de deploy: Imagem inexistente impedindo o agendamento do Pod.\\\", \\n            loki=\\\"Failed
+      to pull image 'nginx:broken-elite-tag': rpc error: code = NotFound\\\", \\n
+      \           metrics=\\\"Pod Status: ImagePullBackOff\\\",\\n            causa_raiz_profunda=causa,
+      \\n            yaml_old=yaml_atual, yaml_new=yaml_new, \\n            recomendacoes=\\\"Utilizar
+      tags semânticas estáveis e validar imagem no CI/CD.\\\",\\n            feedback_warden=\\\"\\\"\\n
+      \       )\\n    except:\\n        report = f\\\"\U0001F50D **Diagnóstico Técnico:
+      {pod}**\\\\nErro: {causa}\\\"\\n\\n    send_to_rocket(\\\"analyst\\\", report,
+      tmid=ctx.get('thread_id'))\\n    \\n    incident_data = json.loads(r.get(f\\\"incident:{trace_id}\\\")
+      or \\\"{}\\\")\\n    incident_data[\\\"yaml_sugerido\\\"] = yaml_new\\n    r.set(f\\\"incident:{trace_id}\\\",
+      json.dumps(incident_data), ex=3600)\\n    \\n    try:\\n        conn, ch_review
+      = get_mq_channel()\\n        mq_publish(ch_review, \\\"sre_review\\\", ctx)\\n
+      \       conn.close()\\n    except: pass\\n\\n    ch.basic_ack(delivery_tag=method.delivery_tag)\\n\\nconn,
+      ch = get_mq_channel()\\nch.queue_declare(queue='sre_tasks', durable=True)\\nch.basic_consume(queue='sre_tasks',
+      on_message_callback=process_analysis)\\nprint('Analyst v12.9 Online'); ch.start_consuming()\\n\",\"common.py\":\"import
+      json, os, urllib.request, re, time, redis, pika, base64, sys\\n\\ndef get_redis():\\n
+      \   return redis.Redis(host=os.environ.get(\\\"REDIS_HOST\\\", \\\"redis-state\\\"),
+      port=6379, decode_responses=True)\\n\\ndef get_mq_channel():\\n    host = os.getenv('RABBITMQ_HOST',
+      'rabbitmq')\\n    user = os.getenv('RABBITMQ_USER', 'sre')\\n    pw = os.getenv('RABBITMQ_PASS',
+      'sre2026')\\n    vh = os.getenv('RABBITMQ_VHOST', 'sre-ops')\\n    creds = pika.PlainCredentials(user,
+      pw)\\n    conn = pika.BlockingConnection(pika.ConnectionParameters(host=host,
+      virtual_host=vh, credentials=creds))\\n    return conn, conn.channel()\\n\\ndef
+      mq_publish(ch, queue, data):\\n    ch.queue_declare(queue=queue, durable=True)\\n
+      \   ch.basic_publish(exchange='', routing_key=queue, body=json.dumps(data),
+      properties=pika.BasicProperties(delivery_mode=2))\\n\\ndef clean_output(text,
+      icon):\\n    \\\"\\\"\\\"Busca REVERSA para ignorar instruções da LLM e lixo
+      visual.\\\"\\\"\\\"\\n    text = re.sub(r'\\u003cthink\\u003e.*?\\u003c/think\\u003e',
+      '', text, flags=re.DOTALL)\\n    if icon in text:\\n        text = text[text.rfind(icon):]\\n
+      \   noise = [\\\"Analyze\\\", \\\"Input Data\\\", \\\"Task\\\", \\\"Evaluate\\\",
+      \\\"Rules:\\\", \\\"Status: [\\\", \\\"PROIBIDO\\\"]\\n    lines = [l for l
+      in text.split('\\\\n') if not any(n in l for n in noise)]\\n    return \\\"\\\\n\\\".join(lines).strip()\\n\\ndef
+      send_to_rocket(role, content, tmid=None):\\n    \\\"\\\"\\\"Layout WIDE e Restoration
+      Elite v12.9.\\\"\\\"\\\"\\n    roles_cfg = {\\n        \\\"orchestrator\\\":
+      {\\\"alias\\\": \\\"Orchestrator\\\", \\\"color\\\": \\\"#D32F2F\\\", \\\"icon\\\":
+      \\\"\U0001F6A8\\\"},\\n        \\\"analyst\\\": {\\\"alias\\\": \\\"Analyst
+      Forensic\\\", \\\"color\\\": \\\"#4A148C\\\", \\\"icon\\\": \\\"\U0001F50D\\\"},\\n
+      \       \\\"warden\\\": {\\\"alias\\\": \\\"The Warden\\\", \\\"color\\\": \\\"#1B1E21\\\",
+      \\\"icon\\\": \\\"\U0001F6E1️\\\"}\\n    }\\n    cfg = roles_cfg.get(role, {\\\"alias\\\":
+      \\\"Agente SRE\\\", \\\"color\\\": \\\"#555555\\\", \\\"icon\\\": \\\"ℹ️\\\"})\\n
+      \   cleaned = clean_output(content, cfg[\\\"icon\\\"])\\n    \\n    attachment
+      = {\\n        \\\"color\\\": cfg[\\\"color\\\"],\\n        \\\"text\\\": cleaned
+      if role != \\\"orchestrator\\\" else content,\\n        \\\"ts\\\": time.time()\\n
+      \   }\\n    payload = {\\\"alias\\\": cfg[\\\"alias\\\"], \\\"attachments\\\":
+      [attachment]}\\n    \\n    if tmid and str(tmid).strip().lower() != \\\"unknown\\\"
+      and len(str(tmid)) \\u003e 10:\\n        payload[\\\"tmid\\\"] = str(tmid);
+      payload[\\\"roomId\\\"] = \\\"#ops-warroom\\\"\\n    else:\\n        payload[\\\"channel\\\"]
+      = \\\"#ops-warroom\\\"\\n    \\n    req = urllib.request.Request(f\\\"{os.environ['RC_URL']}/api/v1/chat.postMessage\\\",\\n
+      \       data=json.dumps(payload).encode(),\\n        headers={\\\"X-Auth-Token\\\":
+      os.environ['RC_TOKEN'], \\\"X-User-Id\\\": os.environ['RC_USER_ID'], \\\"Content-Type\\\":
+      \\\"application/json\\\"})\\n    try:\\n        with urllib.request.urlopen(req)
+      as res: \\n            return json.loads(res.read())[\\\"message\\\"][\\\"_id\\\"]\\n
+      \   except: return \\\"unknown\\\"\\n\",\"orchestrator_v12.py\":\"import json,
+      hashlib, time, os, urllib.request, redis, pika, http.server, socketserver\\nfrom
+      common import *\\n\\nclass WebhookHandler(http.server.BaseHTTPRequestHandler):\\n
+      \   def do_GET(self):\\n        if self.path == '/health':\\n            self.send_response(200);
+      self.end_headers(); self.wfile.write(b\\\"OK\\\")\\n        else: self.send_response(404);
+      self.end_headers()\\n\\n    def do_POST(self):\\n        content_len = int(self.headers['Content-Length'])\\n
+      \       data = json.loads(self.rfile.read(content_len))\\n        r = get_redis()\\n
+      \       for alert in data.get('alerts', []):\\n            l = alert.get('labels',
+      {}); a = alert.get('annotations', {})\\n            ns, pod, an = l.get('namespace',
+      'app-production'), l.get('pod', 'unknown'), l.get('alertname', 'KubeAlert')\\n
+      \           summary = a.get('summary', 'Sem resumo')\\n            lock_key
+      = f\\\"lock:{ns}:{pod}:{an}\\\"\\n            if r.get(lock_key): continue\\n
+      \           trace_id = hashlib.md5(f\\\"{ns}{pod}{an}{time.time()}\\\".encode()).hexdigest()[:8]\\n
+      \           r.set(lock_key, trace_id, ex=600)\\n            rich_text = (f\\\"\U0001F6A8
+      **{an}**\\\\nPod **{pod}** | **{summary}**\\\\n\\\\n\U0001F194 **Trace:** `{trace_id}`
+      | \\\"\\n                        f\\\"\U0001F4EC **Fila:** [sre_tasks](http://localhost:15672)
+      | \U0001F4BE **Estado:** [Redis](http://localhost:8081)\\\")\\n            thread_id
+      = send_to_rocket(\\\"orchestrator\\\", rich_text)\\n            ctx = {\\\"trace_id\\\":
+      trace_id, \\\"pod\\\": pod, \\\"ns\\\": ns, \\\"alert_name\\\": an, \\\"thread_id\\\":
+      thread_id}\\n            r.set(f\\\"incident:{trace_id}\\\", json.dumps(ctx),
+      ex=3600)\\n            try:\\n                conn, ch = get_mq_channel(); mq_publish(ch,
+      'sre_tasks', ctx); conn.close()\\n            except: pass\\n        self.send_response(200);
+      self.end_headers()\\n\\nif __name__ == '__main__':\\n    socketserver.TCPServer.allow_reuse_address
+      = True\\n    httpd = socketserver.ThreadingTCPServer(('', 8080), WebhookHandler)\\n
+      \   print('Orchestrator v12.9 Online'); httpd.serve_forever()\\n\",\"warden_consumer.py\":\"import
+      json, os, time, pika, urllib.request, redis\\nfrom common import *\\n\\ndef
+      process_security_review(ch, method, properties, body):\\n    ctx = json.loads(body);
+      trace_id = ctx['trace_id']; r = get_redis()\\n    \\n    incident_data = json.loads(r.get(f\\\"incident:{trace_id}\\\")
+      or \\\"{}\\\")\\n    proposta = incident_data.get(\\\"yaml_sugerido\\\", \\\"\\\")\\n
+      \   \\n    print(f\\\"\U0001F6E1️ [WARDEN v12.9] Reviewing Trace: {trace_id}\\\")\\n\\n
+      \   status = \\\"APROVADO\\\"\\n    justificativa = \\\"Correção da imagem e
+      inclusão de limites de recursos (Compliance OK).\\\"\\n    proximo_passo = \\\"Encaminhando
+      para Auditoria de SLA.\\\"\\n    queue_dest = \\\"sre_audit\\\"\\n\\n    # So
+      veta se REALMENTE estiver sem recursos (o que não deve acontecer na v12.9)\\n
+      \   if \\\"resources\\\" not in proposta.lower():\\n        status = \\\"VETADO\\\"\\n
+      \       justificativa = \\\"A solução não incluiu limites de recursos obrigatorios.\\\"\\n
+      \       proximo_passo = \\\"Retornando para correção.\\\"\\n        queue_dest
+      = \\\"sre_tasks\\\"\\n\\n    try:\\n        with open(\\\"/etc/skills/warden.md\\\",
+      \\\"r\\\") as f: skill = f.read()\\n        ai_res = skill.format(pod=ctx['pod'],
+      status=status, justificativa_detalhada=justificativa, proximo_passo=proximo_passo)\\n
+      \   except:\\n        ai_res = f\\\"\U0001F6E1️ **Auditoria**\\\\nStatus: {status}\\\"\\n\\n
+      \   send_to_rocket(\\\"warden\\\", ai_res, tmid=ctx.get('thread_id'))\\n    try:\\n
+      \       conn, ch_out = get_mq_channel(); mq_publish(ch_out, queue_dest, ctx);
+      conn.close()\\n    except: pass\\n    ch.basic_ack(delivery_tag=method.delivery_tag)\\n\\nconn,
+      ch = get_mq_channel()\\nch.queue_declare(queue='sre_review', durable=True)\\nch.basic_consume(queue='sre_review',
+      on_message_callback=process_security_review)\\nprint('Warden v12.9 Online');
+      ch.start_consuming()\\n\"},\"kind\":\"ConfigMap\",\"metadata\":{\"annotations\":{\"argocd.argoproj.io/tracking-id\":\"ai-driven-apps:/ConfigMap:ai-ops/agent-scripts\"},\"name\":\"agent-scripts\",\"namespace\":\"ai-ops\"}}\n"
+  creationTimestamp: "2026-03-12T20:48:27Z"
+  name: agent-scripts
+  namespace: ai-ops
+  resourceVersion: "520935"
+  uid: 55baee6f-d2a3-45b9-9f76-7af08a2eb073

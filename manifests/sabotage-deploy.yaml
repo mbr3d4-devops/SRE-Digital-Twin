@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: critical-service-sabotage
+  namespace: app-production
+  labels:
+    app: critical-service
+    simulation: v12.1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: critical-service
+  template:
+    metadata:
+      labels:
+        app: critical-service
+    spec:
+      containers:
+      - name: helper
+        image: busybox
+        command: ["/bin/sh", "-c", "echo 'SRE Sabotage v12.1 initiating...'; sleep 5; exit 1"]
+        resources:
+          limits:
+            cpu: "10m"
+            memory: "16Mi"

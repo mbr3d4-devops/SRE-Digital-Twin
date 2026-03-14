@@ -1,0 +1,36 @@
+--- orchestrator_v7.py
++++ orchestrator_v7.py
+@@ -364,13 +364,28 @@
+ 
+     # WARDEN Validation
++    code_orig, orig_obj = k8s_request("GET", "/apis/apps/v1/namespaces/" + ns + "/deployments/" + deploy)
++    original_manifest = orig_obj if code_orig == 200 else {}
++    
++    # K8s DryRun First
+     code2, res2 = k8s_request("PUT", "/apis/apps/v1/namespaces/" + ns + "/deployments/" + deploy + "?dryRun=All", manifest)
+     warden_ok = (code2 in [200, 201])
+     
+     if warden_ok:
+-        w_audit = f"✅ **DryRun Aprovado (HTTP 200)**\n\nAs alterações no JSON do Deployment `{deploy}` no namespace `{ns}` foram validadas pelo KubeAPI.\n\n🛡️ Nenhuma Secret foi exposta no spec."
+-        send_to_rocket("warden", f"🔒 **Patch Aprovado**\n\n{w_audit}", "The Warden", attachments=[{"color": COLORS["ops-security"], "title": "Status da Auditoria", "text": "Seguro para aplicar"}])
+-        
+-        logger.info(f"DryRun Aprovado para deployment {deploy}", 
+-                    extra={"role": "warden", "operation": "security_dryrun", "trace_id": trace_id, "thread_id": thread_id, "metadata": {"status": "success"}})
++        # Governance Eval (As 3 Leis)
++        warden_result = evaluate_warden_pod(deploy, ns, original_manifest, manifest, trace_id)
++        if "DECISION: APPROVED" in warden_result:
++            w_audit = f"✅ **DryRun K8s Aprovado**\n✅ **Governança Aprovada**\n\nNenhuma violação de `STATE.md` ou `REQUIREMENTS.md`.\n\n🛡️ Nenhuma Secret foi exposta no spec."
++            send_to_rocket("warden", f"🔒 **Patch Aprovado**\n\n{w_audit}", "The Warden", attachments=[{"color": COLORS["ops-security"], "title": "Status da Auditoria", "text": "Seguro para aplicar"}])
++            logger.info(f"DryRun Aprovado para deployment {deploy}", 
++                        extra={"role": "warden", "operation": "security_dryrun", "trace_id": trace_id, "thread_id": thread_id, "metadata": {"status": "success"}})
++        else:
++            warden_ok = False
++            reason = warden_result.split("REASON:")[1].strip() if "REASON:" in warden_result else warden_result
++            w_audit = f"✅ **DryRun K8s Aprovado**\n🚨 **Governança REJEITADA**\n\n**Motivo (Warden):** {reason}\n\nO patch não será enviado ao Git."
++            send_to_rocket("warden", f"🔒 **VETO DE GOVERNANÇA**\n\n{w_audit}", "The Warden", attachments=[{"color": COLORS["rejected"], "title": "Status da Auditoria", "text": "Violou as Leis do Warden"}])
++            logger.warning(f"Governanca Rejeitada para deployment {deploy}", 
++                           extra={"role": "warden", "operation": "security_governance", "trace_id": trace_id, "thread_id": thread_id, "metadata": {"status": "failed", "reason": reason}})
++    
++    if warden_ok:
+         
+         pending_actions[action_id] = {"alert": alert, "manifest_str": json.dumps(manifest, indent=2), "deploy": deploy, "ns": ns, "desc": fix_desc, "diag": diagnosis, "status": "pending", "trace_id": trace_id, "thread_id": thread_id}

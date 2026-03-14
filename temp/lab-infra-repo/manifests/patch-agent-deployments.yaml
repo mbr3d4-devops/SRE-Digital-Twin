@@ -1,0 +1,6 @@
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: preflight-check
+        command: ['python', '/scripts/preflight.py']
