@@ -1,0 +1,37 @@
+# SRE Cognitive OS - Immutable Runtime Image
+# Version: v0.10.0
+
+FROM python:3.11-slim
+
+# Labels para rastreabilidade
+LABEL maintainer="SRE Team"
+LABEL version="v0.10.0"
+LABEL description="Immutable Runtime for AI-SRE Cognitive OS Agents"
+
+# Prevenção de escrita de bytecode e buffering de log
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Instalação de utilitários core (kubectl)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && curl -LO https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl \
+    && chmod +x kubectl \
+    && mv kubectl /usr/local/bin/ \
+    && apt-get purge -y --auto-remove curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Instalação de dependências Python (Fixadas para determinismo)
+RUN pip install --no-cache-dir \
+    PyYAML==6.0.1 \
+    redis==5.0.1 \
+    pika==1.3.2 \
+    prometheus-client==0.19.0
+
+# Diretório de trabalho padrão (conforme mapeamento K8s)
+WORKDIR /etc/ai-ops/scripts
+
+# O código continuará vindo via ConfigMap/Volume para agilidade em Lab,
+# mas as dependências agora são imutáveis na imagem.
+CMD ["python", "runtime/orchestrator.py"]

@@ -38,7 +38,7 @@ data:
             req = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=120) as res:
                 return clean_output(json.loads(res.read())["choices"][0]["message"]["content"])
-        except Exception as e: return f"⚠️ Erro de IA ({agent_name}): {e}"
+        except Exception as e: return json.dumps({"error": "LLM_GATEWAY_FAILURE", "agent": agent_name, "details": str(e)})
 
   runtime.messaging.py: |
     import os, json, time, pika, urllib.request
@@ -73,9 +73,12 @@ data:
         def get_analysis_raw(self, tid): return self.r.get(f"analysis_raw:{tid}") or "{}"
 
   evidence_engine.collectors.py: |
-    import os, time, json
-    def run_command(cmd):
-        try: return os.popen(cmd).read()[:3000]
+    import os, time, json, subprocess
+    def run_command(cmd, timeout=30):
+        try:
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+            return (result.stdout + result.stderr)[:3000]
+        except subprocess.TimeoutExpired: return "⚠️ TIMEOUT: Comando demorou mais de 30s"
         except Exception as e: return f"Erro coleta: {e}"
     def collect_k8s_assets(pod, ns):
         clean_pod = pod.split('/')[-1]
@@ -129,15 +132,24 @@ data:
                 if alert.get('status') == 'resolved': continue
                 fp = alert.get("fingerprint")
                 if fp and tm.r.get(f"fp:{fp}"): continue
+                # Lifecycle Check: Se já existe um incidente ativo para este fingerprint, ignora.
+                if fp:
+                    current_state = tm.r.get(f"state_fp:{fp}")
+                    if current_state and current_state != "RESOLVED": continue
+                    tm.r.set(f"state_fp:{fp}", "OPEN", ex=86400)
+                
                 if fp: tm.r.set(f"fp:{fp}", "1", ex=600)
                 tid = str(uuid.uuid4())[:8]; labels = alert.get('labels', {})
+                tm.r.set(f"state:{tid}", "OPEN", ex=86400)
                 with open("/etc/ai-ops/agents/orchestrator/skill.md", "r") as f: template = f.read()
                 msg = template.format(alertname=labels.get('alertname', 'Alerta'), pod=labels.get('pod', 'N/A'), ns=labels.get('namespace', 'N/A'), summary=alert.get('annotations', {}).get('summary', 'Sem sumário'), trace_id=tid)
                 msg_id = send_to_rocket("orchestrator", msg)
-                if msg_id: tm.set_thread(tid, msg_id)
+                if msg_id:
+                    tm.set_thread(tid, msg_id)
+                    if fp: tm.r.set(f"thread_fp:{fp}", msg_id, ex=86400)
                 tm.save_evidence(tid, json.dumps(alert))
                 conn = get_mq_conn(); ch = conn.channel()
-                ch.queue_declare(queue='sre_tasks', durable=True); ch.basic_publish(exchange='', routing_key='sre_tasks', body=json.dumps({"trace_id": tid, "thread_id": msg_id}))
+                ch.queue_declare(queue='sre_tasks', durable=True); ch.basic_publish(exchange='', routing_key='sre_tasks', body=json.dumps({"trace_id": tid, "thread_id": msg_id, "fp": fp}))
                 conn.close()
             self.send_response(200); self.end_headers()
     if __name__ == "__main__": HTTPServer(('0.0.0.0', 8080), WebhookHandler).serve_forever()
@@ -151,7 +163,9 @@ data:
     from renderer.forensic_markdown import render
     def callback(ch, method, props, body):
         try:
-            ctx = json.loads(body.decode()); tid = ctx.get('trace_id', 'unknown'); tm = ThreadManager()
+            ctx = json.loads(body.decode()); tid = ctx.get('trace_id', 'unknown'); fp = ctx.get('fp'); tm = ThreadManager()
+            tm.r.set(f"state:{tid}", "ANALYZING", ex=86400)
+            if fp: tm.r.set(f"state_fp:{fp}", "ANALYZING", ex=86400)
             tmid = ctx.get('thread_id') or tm.get_thread(tid); alert_raw = tm.get_evidence(tid); alert = json.loads(alert_raw)
             enriched = package_evidence(alert.get('labels', {}).get('pod', 'N/A'), alert.get('labels', {}).get('namespace', 'default'))
             raw_ai = call_llm("analyst", f"ALERTA: {alert_raw}\n\nEVIDENCIAS:\n{enriched}", trace_id=tid)
@@ -173,7 +187,9 @@ data:
     from runtime.llm_gateway import call_llm
     def callback(ch, method, props, body):
         try:
-            ctx = json.loads(body.decode()); tid = ctx['trace_id']; tm = ThreadManager()
+            ctx = json.loads(body.decode()); tid = ctx['trace_id']; fp = ctx.get('fp'); tm = ThreadManager()
+            tm.r.set(f"state:{tid}", "AUDITING", ex=86400)
+            if fp: tm.r.set(f"state_fp:{fp}", "AUDITING", ex=86400)
             raw_ai = call_llm("warden", f"ANALISE: {tm.get_analysis_raw(tid)}", trace_id=tid)
             try: data = json.loads(raw_ai); veredito = data.get('veredito', 'REPROVADO').upper(); justificativa = data.get('justificativa', raw_ai)
             except: veredito = "REPROVADO"; justificativa = raw_ai
@@ -192,7 +208,9 @@ data:
     from runtime.thread_manager import ThreadManager
     def callback(ch, method, props, body):
         try:
-            ctx = json.loads(body.decode()); tid = ctx['trace_id']; tm = ThreadManager()
+            ctx = json.loads(body.decode()); tid = ctx['trace_id']; fp = ctx.get('fp'); tm = ThreadManager()
+            tm.r.set(f"state:{tid}", "RESOLVED", ex=86400)
+            if fp: tm.r.set(f"state_fp:{fp}", "RESOLVED", ex=86400)
             if tm.r.get(f"status:{tid}") == "resolved" and not tm.r.get(f"prompt_sent:{tid}"):
                 send_to_rocket("auditor", "✅ **Sistema Estabilizado Técnico.**\nMarcelo, informe:\n1. O que foi feito?\n2. Como foi feito?\n3. Por quê foi feito?", tmid=tm.get_thread(tid))
                 tm.r.set(f"prompt_sent:{tid}", "true", ex=3600)
