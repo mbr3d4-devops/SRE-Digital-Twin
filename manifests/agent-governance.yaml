@@ -18,6 +18,8 @@ data:
     - Se não houver evidência suficiente, declare "EVIDÊNCIA INSUFICIENTE".
     - PROIBIDO gerar Markdown manual no LLM (use o Renderer).
     - Evidências devem ser listas simples de strings (linhas de dados).
+    - CAUSALIDADE: "Connection refused" significa destino não escutando OU ausência de endpoint. Investigue nesta ordem.
+    - ANTI-ALUCINAÇÃO: Causa raiz exige padrão de log confirmado. Nunca invente remediações.
 
   yaml.rules.md: |
     # SRE YAML Rules

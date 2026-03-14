@@ -86,34 +86,43 @@ data:
     def collect_live_yaml(ns, describe):
         if "Owner-Ref" in describe or "Controlled By" in describe: return run_command(f'kubectl get deployment -n {ns} -o yaml | grep -A 20 "spec:"')
         return "EVIDÊNCIA INSUFICIENTE (YAML)"
-    def get_metrics_mock(pod):
-        # Removido mock fixo de 4 restarts para evitar falso positivo do Analista
-        return [f"container_memory_usage_bytes{{pod='{pod}'}} 420Mi", f"kube_pod_container_status_restarts_total{{pod='{pod}'}} 0"]
+    def collect_topology(ns):
+        svc = run_command(f'kubectl get svc -n {ns} -o wide')
+        ep = run_command(f'kubectl get endpoints -n {ns}')
+        netpol = run_command(f'kubectl get netpol -n {ns}')
+        return f"SERVICES:\n{svc}\n\nENDPOINTS:\n{ep}\n\nNETWORK_POLICIES:\n{netpol}"
+    def get_causal_metrics(pod, ns):
+        # Substituição por métricas determinísticas causais (Mock para Lab)
+        return [f"kube_endpoint_address_available{{namespace='{ns}'}} 0", f"kube_pod_container_status_ready{{pod='{pod}'}} 0"]
 
   evidence_engine.normalizer.py: |
     import time, json
-    from .collectors import collect_k8s_assets, collect_live_yaml, get_metrics_mock
+    from .collectors import collect_k8s_assets, collect_live_yaml, collect_topology, get_causal_metrics
     def package_evidence(pod, ns):
         if not pod or pod == "N/A": return "Nenhuma evidência capturada (Pod N/A)."
         describe, logs, events = collect_k8s_assets(pod, ns)
-        package = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "describe": describe, "logs": logs, "events": events, "live_yaml": collect_live_yaml(ns, describe), "metrics": get_metrics_mock(pod), "gitops_drift": "ArgoCD: OutOfSync"}
+        package = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"), "describe": describe, "logs": logs, "events": events, "topology": collect_topology(ns), "metrics": get_causal_metrics(pod, ns), "gitops_drift": "ArgoCD: OutOfSync"}
         return json.dumps(package, indent=2)
 
   renderer.forensic_markdown.py: |
     def section(t, c): return f"\n{t}\n{c}\n" if c else ""
     def code_block(l, c): return f"```{l}\n{c}\n```" if c else ""
-    def list_to_block(l, i): return code_block(l, "\n".join(i)) if i else ""
-    def metrics_block(m): return list_to_block("metrics", [f"{k} {v}" for k, v in m.items() if isinstance(m, dict)] or m) if m else ""
     def render(d):
         if not isinstance(d, dict): return d
-        ev = d.get("evidencias", {})
-        out = "INCIDENT FORENSIC REPORT\n────────────────────────\n"
-        out += section("Incident", d.get("incidente")) + section("Executive Summary", d.get("resumo_forense"))
-        out += section("Metrics (Prometheus)", metrics_block(ev.get("metricas"))) + section("Logs (Loki)", list_to_block("log", ev.get("logs")))
-        out += section("Kubernetes Events", list_to_block("event", ev.get("eventos"))) + section("Describe (kubectl)", code_block("describe", ev.get("describe")))
-        out += section("GitOps Context", code_block("gitops", ev.get("gitops"))) + section("Root Cause", d.get("causa_raiz"))
-        if d.get("yaml_sugerido"): out += section("Proposed Change", code_block("yaml", d.get("yaml_sugerido")))
-        out += section("Analysis Confidence", d.get("confianca"))
+        inc = d.get("incident", {})
+        ev = d.get("evidence", {})
+        chain = d.get("causal_chain", [])
+        chain_str = "\n".join([f"- **{c.get('symptom')}** → {c.get('failed_component')} ({c.get('failing_layer')}): {c.get('causal_trigger')}" for c in chain])
+        out = f"🧠 STAFF SRE FORENSIC REPORT | {inc.get('severity', 'INFO')}\n"
+        out += "────────────────────────────────────────\n"
+        out += section("Incident", inc.get("name")) + section("Executive Summary", d.get("executive_summary"))
+        out += section("Causal Chain", chain_str)
+        out += section("Metrics", code_block("metrics", ev.get("metrics")))
+        out += section("Logs", code_block("log", ev.get("logs")))
+        out += section("Kubernetes Topology", code_block("text", ev.get("service_topology")))
+        out += section("Root Cause", d.get("root_cause"))
+        out += section("Recommended Action", d.get("recommended_action"))
+        out += f"\n**Confidence:** {d.get('confidence_score')}/100 | **Risk:** {d.get('risk_level')}"
         return out.strip()
 
   runtime.orchestrator.py: |
@@ -168,7 +177,8 @@ data:
             if fp: tm.r.set(f"state_fp:{fp}", "ANALYZING", ex=86400)
             tmid = ctx.get('thread_id') or tm.get_thread(tid); alert_raw = tm.get_evidence(tid); alert = json.loads(alert_raw)
             enriched = package_evidence(alert.get('labels', {}).get('pod', 'N/A'), alert.get('labels', {}).get('namespace', 'default'))
-            raw_ai = call_llm("analyst", f"ALERTA: {alert_raw}\n\nEVIDENCIAS:\n{enriched}", trace_id=tid)
+            # Causal Logic: Fornecer topologia e métricas específicas ao LLM
+            raw_ai = call_llm("analyst", f"ALERTA: {alert_raw}\n\nCOLETA_SRE:\n{enriched}", trace_id=tid)
             if '"error":' in raw_ai:
                 send_to_rocket("analyst", raw_ai, tmid=tmid); ch.basic_ack(delivery_tag=method.delivery_tag); return
             try: laudo = render(json.loads(raw_ai))
