@@ -1,3 +1,16 @@
+# ##############################################################################
+# SRE COGNITIVE OS - TECHNICAL CHANGELOG
+# ##############################################################################
+# Snapshot: Legacy Base / Intermediate Version
+# Date: 2026-03-12
+# 
+# ARCHITECTURAL NOTE:
+# This is a legacy snapshot of the AIOps Platform. 
+# Pre-v0.9.0 versions may not support modular cognitive OS components.
+# 
+# STATUS: ARCHIVED / LEGACY
+# ##############################################################################
+
 ################################################################################
 # AIOPS PLATFORM CONSOLIDATED CONTEXT
 # VERSION: v0.8.0-forensic-markdown-renderer
