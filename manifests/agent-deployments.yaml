@@ -20,9 +20,7 @@ spec:
         command:
         - /bin/sh
         - -c
-        - apt-get update && apt-get install -y curl && curl -LO https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
-          && chmod +x kubectl && mv kubectl /usr/local/bin/ && pip install PyYAML
-          redis pika && python /etc/ai-ops/scripts/runtime/analyst.py
+        - "if ! command -v kubectl; then apt-get update && apt-get install -y curl && curl -LO https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl && chmod +x kubectl && mv kubectl /usr/local/bin/; fi && pip install --no-cache-dir PyYAML redis pika && python /etc/ai-ops/scripts/runtime/analyst.py"
         env:
         - name: PYTHONUNBUFFERED
           value: '1'
@@ -48,7 +46,7 @@ spec:
         configMap:
           name: agent-scripts
           items:
-          - key: runtime.llm_gateway.py
+          - key: runtime.__init__.py
             path: runtime/__init__.py
           - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
@@ -56,13 +54,13 @@ spec:
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
-          - key: evidence_engine.collectors.py
+          - key: evidence_engine.__init__.py
             path: evidence_engine/__init__.py
           - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
-          - key: renderer.forensic_markdown.py
+          - key: renderer.__init__.py
             path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
@@ -116,7 +114,7 @@ spec:
         command:
         - /bin/sh
         - -c
-        - pip install PyYAML redis pika && python /etc/ai-ops/scripts/runtime/warden.py
+        - "pip install --no-cache-dir PyYAML redis pika && python /etc/ai-ops/scripts/runtime/warden.py"
         env:
         - name: PYTHONUNBUFFERED
           value: '1'
@@ -142,7 +140,7 @@ spec:
         configMap:
           name: agent-scripts
           items:
-          - key: runtime.llm_gateway.py
+          - key: runtime.__init__.py
             path: runtime/__init__.py
           - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
@@ -150,13 +148,13 @@ spec:
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
-          - key: evidence_engine.collectors.py
+          - key: evidence_engine.__init__.py
             path: evidence_engine/__init__.py
           - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
-          - key: renderer.forensic_markdown.py
+          - key: renderer.__init__.py
             path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
@@ -222,7 +220,7 @@ spec:
       - command:
         - /bin/sh
         - -c
-        - pip install PyYAML redis pika prometheus-client && python /etc/ai-ops/scripts/runtime/orchestrator.py
+        - "pip install --no-cache-dir PyYAML redis pika prometheus-client && python /etc/ai-ops/scripts/runtime/orchestrator.py"
         env:
         - name: PYTHONUNBUFFERED
           value: '1'
@@ -278,7 +276,7 @@ spec:
         configMap:
           name: agent-scripts
           items:
-          - key: runtime.llm_gateway.py
+          - key: runtime.__init__.py
             path: runtime/__init__.py
           - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
@@ -286,13 +284,13 @@ spec:
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
-          - key: evidence_engine.collectors.py
+          - key: evidence_engine.__init__.py
             path: evidence_engine/__init__.py
           - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
-          - key: renderer.forensic_markdown.py
+          - key: renderer.__init__.py
             path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
@@ -377,7 +375,7 @@ spec:
       - command:
         - /bin/sh
         - -c
-        - pip install PyYAML redis pika && python /etc/ai-ops/scripts/runtime/auditor.py
+        - "pip install --no-cache-dir PyYAML redis pika && python /etc/ai-ops/scripts/runtime/auditor.py"
         env:
         - name: PYTHONUNBUFFERED
           value: '1'
@@ -415,7 +413,7 @@ spec:
       - configMap:
           name: agent-scripts
           items:
-          - key: runtime.llm_gateway.py
+          - key: runtime.__init__.py
             path: runtime/__init__.py
           - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
@@ -423,13 +421,13 @@ spec:
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
-          - key: evidence_engine.collectors.py
+          - key: evidence_engine.__init__.py
             path: evidence_engine/__init__.py
           - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
-          - key: renderer.forensic_markdown.py
+          - key: renderer.__init__.py
             path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
@@ -553,7 +551,7 @@ spec:
       - configMap:
           name: agent-scripts
           items:
-          - key: runtime.llm_gateway.py
+          - key: runtime.__init__.py
             path: runtime/__init__.py
           - key: runtime.llm_gateway.py
             path: runtime/llm_gateway.py
@@ -561,13 +559,13 @@ spec:
             path: runtime/messaging.py
           - key: runtime.thread_manager.py
             path: runtime/thread_manager.py
-          - key: evidence_engine.collectors.py
+          - key: evidence_engine.__init__.py
             path: evidence_engine/__init__.py
           - key: evidence_engine.collectors.py
             path: evidence_engine/collectors.py
           - key: evidence_engine.normalizer.py
             path: evidence_engine/normalizer.py
-          - key: renderer.forensic_markdown.py
+          - key: renderer.__init__.py
             path: renderer/__init__.py
           - key: renderer.forensic_markdown.py
             path: renderer/forensic_markdown.py
