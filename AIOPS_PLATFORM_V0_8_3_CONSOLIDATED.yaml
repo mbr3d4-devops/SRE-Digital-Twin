@@ -1,3 +1,17 @@
+# ##############################################################################
+# SRE COGNITIVE OS - TECHNICAL CHANGELOG
+# ##############################################################################
+# Snapshot: v0.8.3-codeblock-evidence-style
+# Date: 2026-03-12
+# 
+# UI/UX IMPROVEMENTS:
+# 1. Forensic Rendering: All evidence now wrapped in specific code blocks.
+# 2. Data Integrity: Pure raw text representation (no Markdown auto-formatting).
+# 3. Tone of Voice: Removed emojis and informal language (Postmortem standard).
+# 
+# STATUS: LEGACY (RENDERER PILOT)
+# ##############################################################################
+
 ################################################################################
 # AIOPS PLATFORM CONSOLIDATED CONTEXT
 # VERSION: v0.8.3-codeblock-evidence-style
