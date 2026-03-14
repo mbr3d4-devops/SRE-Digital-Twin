@@ -1,3 +1,17 @@
+# ##############################################################################
+# SRE COGNITIVE OS - TECHNICAL CHANGELOG
+# ##############################################################################
+# Snapshot: v14.5.3-llm-parser-hardening
+# Date: 2026-03-12
+# 
+# PATCH IMPROVEMENTS:
+# 1. LLM Gateway: Enhanced cleaning logic for JSON output.
+# 2. Parser Hardening: Explicit regex to strip Markdown pollution (code blocks).
+# 3. Error Handling: Return structured error JSON on LLM failure.
+# 
+# STATUS: LEGACY STABLE
+# ##############################################################################
+
 ################################################################################
 # AIOPS PLATFORM CONSOLIDATED CONTEXT
 # VERSION: v14.5.3-llm-parser-hardening
